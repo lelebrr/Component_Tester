@@ -36,7 +36,7 @@ int totalMenuItems = 0;
 
 void setup() {
   Serial.begin(115200);
-  Serial.println(F("Iniciando Component Tester PRO v2.0..."));
+  Serial.println(F("CT PRO v2.0"));
 
   // Inicializa TFT
   tft.begin();
@@ -47,11 +47,11 @@ void setup() {
   tft.setTextColor(ILI9341_WHITE, ILI9341_BLACK);
   tft.setTextSize(2);
   tft.setCursor(10, 10);
-  tft.println(F("Component Tester PRO v2.0"));
+  tft.println(F("CT PRO v2.0"));
   tft.setTextSize(1);
   tft.setCursor(10, 30);
-  tft.println(F("- Leandro -"));
-  delay(2000);
+  tft.println(F("Leandro"));
+  delay(1000);
   tft.fillScreen(ILI9341_BLACK);
 
   // Inicializa LEDs
@@ -69,14 +69,14 @@ void setup() {
 
   // Inicializa SD Card
   if (!SD.begin(SD_CS_PIN)) {
-    Serial.println(F("Falha na inicialização do SD Card!"));
+    Serial.println(F("SD Err!"));
     tft.setTextColor(ILI9341_RED, ILI9341_BLACK);
     tft.setCursor(10, 50);
-    tft.println(F("SD Card Error!"));
+    tft.println(F("SD Err!"));
     while (true)
-      ; // Trava aqui se o SD falhar
+      ;
   }
-  Serial.println(F("SD Card inicializado."));
+  Serial.println(F("SD OK"));
 
   // Inicializa sonda térmica
   thermal_init();

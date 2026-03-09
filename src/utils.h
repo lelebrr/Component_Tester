@@ -2,8 +2,13 @@
 #define UTILS_H
 
 #include <Arduino.h>
+#include <Print.h>
+
+// Custom float printing to save space
+void fprint(Print &p, float val, int prec);
 
 // Funções utilitárias
+void showBackMsg();
 void calibrate_probes();
 void set_offsets();
 void handle_timeout();

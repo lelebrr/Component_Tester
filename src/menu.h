@@ -22,6 +22,7 @@ void draw_menu();
 void draw_footer();
 void draw_settings_menu();
 void handle_settings_menu();
+void draw_settings_menu_with_highlights(int highlighted);
 void draw_about_screen();
 
 #endif // MENU_H

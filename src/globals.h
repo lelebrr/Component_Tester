@@ -3,6 +3,16 @@
 
 #include <Arduino.h>
 
+// Macro for optional serial debugging to save space
+#define SERIAL_DEBUG 0
+#if SERIAL_DEBUG
+#define LOG_SERIAL(x) Serial.println(F(x))
+#define LOG_BEGIN(x) Serial.begin(x)
+#else
+#define LOG_SERIAL(x)
+#define LOG_BEGIN(x)
+#endif
+
 // Variáveis globais para estado da máquina
 extern enum AppState {
   STATE_SPLASH,

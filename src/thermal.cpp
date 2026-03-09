@@ -2,21 +2,23 @@
 #include "buzzer.h"
 #include "globals.h"
 #include "leds.h"
+#include "utils.h"
 #include <Adafruit_GFX.h>
 #include <Adafruit_ILI9341.h>
+#include <OneWire.h>
+
 
 extern Adafruit_ILI9341 tft;
 
-// Definição dos objetos OneWire e DallasTemperature
+// Objeto OneWire
 OneWire oneWireBus(ONEWIRE_BUS_PIN);
-DallasTemperature sensors(&oneWireBus);
 
 // Variáveis para controle da leitura da temperatura
 unsigned long lastTempReadMillis = 0;
 const long tempReadInterval = 500; // Leitura a cada 500ms
 
 // Inicializa a sonda térmica
-void thermal_init() { sensors.begin(); }
+void thermal_init() {}
 
 // Manipula o estado da sonda térmica
 void thermal_handle() {
@@ -31,32 +33,37 @@ void thermal_handle() {
     tft.setTextColor(ILI9341_WHITE, ILI9341_BLACK);
     tft.setTextSize(2);
     tft.setCursor(10, 10);
-    tft.print(F("Temp: "));
-    tft.print(currentTemperature, 1);
-    tft.println(F(" C"));
+    tft.print(F("T: "));
+    fprint(tft, currentTemperature, 1);
+    tft.println('C');
 
-    tft.setTextSize(1);
     tft.setCursor(10, 40);
     if (currentTemperature < TEMP_NORMAL_THRESHOLD) {
       tft.setTextColor(ILI9341_GREEN, ILI9341_BLACK);
-      tft.println(F("Normal"));
+      tft.println(F("OK"));
     } else if (currentTemperature < TEMP_HOT_THRESHOLD) {
       tft.setTextColor(ILI9341_YELLOW, ILI9341_BLACK);
-      tft.println(F("Quente! Cuidado"));
-    } else if (currentTemperature < TEMP_DANGER_THRESHOLD) {
-      tft.setTextColor(ILI9341_ORANGE, ILI9341_BLACK);
-      tft.println(F("Muito Quente! Perigo"));
+      tft.println(F("HOT"));
     } else {
       tft.setTextColor(ILI9341_RED, ILI9341_BLACK);
-      tft.println(F("PERIGO! DESLIGUE!"));
+      tft.println(F("DANGER"));
     }
   }
 }
 
-// Lê a temperatura do sensor DS18B20
+// Lê a temperatura do sensor DS18B20 (Simplified)
 float read_temperature() {
-  sensors.requestTemperatures();
-  return sensors.getTempCByIndex(0);
+  byte data[2];
+  oneWireBus.reset();
+  oneWireBus.write(0xCC); // Skip ROM
+  oneWireBus.write(0x44); // Convert
+  delay(750);
+  oneWireBus.reset();
+  oneWireBus.write(0xCC);
+  oneWireBus.write(0xBE); // Read
+  data[0] = oneWireBus.read();
+  data[1] = oneWireBus.read();
+  return (float)((data[1] << 8) | data[0]) / 16.0;
 }
 
 // Verifica alertas de temperatura e aciona LEDs/buzzer

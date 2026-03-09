@@ -1,5 +1,8 @@
 #include "logger.h"
 #include "globals.h"
+#include "utils.h"
+#include <Arduino.h>
+#include <SD.h>
 
 // Inicializa o logging (já feito no setup do main, mas a função pode ser usada
 // para re-inicializar)
@@ -10,7 +13,7 @@ void log_init() {
 
   // Verifica se o SD Card está disponível
   if (!SD.begin(SD_CS_PIN)) {
-    Serial.println(F("Erro: SD Card não inicializado!"));
+    LOG_SERIAL("SD Err!");
     return;
   }
 
@@ -19,13 +22,12 @@ void log_init() {
   if (logFile) {
     if (logFile.size() == 0) {
       // Escreve cabeçalho se arquivo estiver vazio
-      logFile.println(F("=== Component Tester PRO v2.0 - Log de Medicoes ==="));
-      logFile.println(F("Timestamp(ms),Tipo,Valor,Temp(C),Julgamento"));
-      logFile.println(F("==============================================="));
+      logFile.println(F("CT PRO v2.0 Log"));
+      logFile.println(F("ms,Type,Val,Temp,Judg"));
     }
     logFile.close();
   } else {
-    Serial.println(F("Erro: Não foi possível criar arquivo LOG.TXT"));
+    LOG_SERIAL("Log Err");
   }
 }
 
@@ -34,18 +36,17 @@ void log_measurement(const char *type, float value, float temp,
                      const char *judgment) {
   File logFile = SD.open(F("LOG.TXT"), FILE_WRITE);
   if (logFile) {
-    logFile.print(F("Time: "));
     logFile.print(millis());
-    logFile.print(F("ms, Type: "));
+    logFile.print(',');
     logFile.print(type);
-    logFile.print(F(", Value: "));
-    logFile.print(value, 3);
-    logFile.print(F(", Temp: "));
-    logFile.print(temp, 1);
-    logFile.print(F(", Judgment: "));
+    logFile.print(',');
+    fprint(logFile, value, 2);
+    logFile.print(',');
+    fprint(logFile, temp, 1);
+    logFile.print(',');
     logFile.println(judgment);
     logFile.close();
   } else {
-    Serial.println(F("Erro ao abrir LOG.TXT para escrita!"));
+    LOG_SERIAL("SD Wrt Err");
   }
 }

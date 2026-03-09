@@ -3,13 +3,10 @@
 
 #include "config.h"
 #include <Arduino.h>
-#include <DallasTemperature.h>
 #include <OneWire.h>
 
-
-// Declaração do objeto OneWire e DallasTemperature
+// Declaração do objeto OneWire
 extern OneWire oneWireBus;
-extern DallasTemperature sensors;
 
 // Funções para manipulação da sonda térmica
 void thermal_init();

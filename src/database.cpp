@@ -1,4 +1,5 @@
 #include "database.h"
+#include "globals.h"
 #include <SD.h>
 #include <stdlib.h>
 #include <string.h>
@@ -79,7 +80,7 @@ ComponentDB findBestMatch(uint8_t category, uint16_t measured_value1,
 
   File dbFile = SD.open("/COMPBD.CSV", FILE_READ);
   if (!dbFile) {
-    Serial.println(F("Failed to open COMPBD.CSV"));
+    LOG_SERIAL("DB Err");
     strncpy(bestMatch.name, "SD ERROR", sizeof(bestMatch.name) - 1);
     return bestMatch;
   }

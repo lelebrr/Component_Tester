@@ -1,12 +1,15 @@
 #include "menu.h"
 #include "buttons.h"
-#include "leds.h"
+#include "buzzer.h"
+#include "drawings.h"
 #include "measurements.h"
+#include <Adafruit_ILI9341.h>
+#include <Arduino.h>
 
 // Definição dos itens do menu
-MenuItem menuItems[] = {{"Medir Componente", STATE_MEASURING},
-                        {"Sonda Termica", STATE_THERMAL_PROBE},
-                        {"Configuracoes", STATE_SETTINGS},
+MenuItem menuItems[] = {{"Medir", STATE_MEASURING},
+                        {"Termica", STATE_THERMAL_PROBE},
+                        {"Config", STATE_SETTINGS},
                         {"Sobre", STATE_ABOUT}};
 
 const int NUM_MENU_ITEMS = sizeof(menuItems) / sizeof(menuItems[0]);
@@ -82,7 +85,7 @@ void draw_footer() {
   tft.setTextColor(ILI9341_CYAN, ILI9341_BLACK);
   tft.fillRect(0, tft.height() - 20, tft.width(), 20, ILI9341_DARKGREY);
   tft.setCursor(5, tft.height() - 15);
-  tft.print(F("UP/DW: Scroll | OK: Select | BCK: Exit"));
+  tft.print(F("UP/DW | OK | BCK"));
 }
 
 // Desenha o menu de configurações
@@ -110,24 +113,50 @@ void draw_settings_menu() {
 
 // Manipula o menu de configurações
 void handle_settings_menu() {
-  buttons_update();
+  static int currentSettingsItem = 0;
+  const int NUM_SETTINGS_ITEMS = 5;
 
   if (isUpPressed()) {
-    // Navegação para cima
-    // Implementar navegação entre itens
+    currentSettingsItem =
+        (currentSettingsItem - 1 + NUM_SETTINGS_ITEMS) % NUM_SETTINGS_ITEMS;
+    draw_settings_menu_with_highlights(currentSettingsItem);
   }
   if (isDownPressed()) {
-    // Navegação para baixo
-    // Implementar navegação entre itens
+    currentSettingsItem = (currentSettingsItem + 1) % NUM_SETTINGS_ITEMS;
+    draw_settings_menu_with_highlights(currentSettingsItem);
   }
   if (isOkPressed()) {
-    // Executa função selecionada
-    // Implementar lógica de seleção
+    // Ação para o item selecionado
+    play_beep(100);
   }
   if (isBackPressed()) {
     currentAppState = STATE_MENU;
     tft.fillScreen(ILI9341_BLACK);
+    draw_menu();
   }
+}
+
+void draw_settings_menu_with_highlights(int highlighted) {
+  tft.fillScreen(ILI9341_BLACK);
+  tft.setTextColor(ILI9341_WHITE, ILI9341_BLACK);
+  tft.setTextSize(2);
+  tft.setCursor(10, 10);
+  tft.println(F("Configuracoes"));
+
+  const char *settings[] = {"1. Calibrar", "2. Modo Escuro", "3. Silencioso",
+                            "4. Reset Ctr", "5. Firmware"};
+
+  tft.setTextSize(1);
+  for (int i = 0; i < 5; i++) {
+    tft.setCursor(10, 40 + i * 20);
+    if (i == highlighted) {
+      tft.setTextColor(ILI9341_BLACK, ILI9341_WHITE);
+    } else {
+      tft.setTextColor(ILI9341_WHITE, ILI9341_BLACK);
+    }
+    tft.println(settings[i]);
+  }
+  draw_footer();
 }
 
 // Desenha a tela sobre/informações

@@ -1,4 +1,22 @@
 #include "utils.h"
+#include <Print.h>
+
+void fprint(Print &p, float val, int prec) {
+  if (val < 0) {
+    p.print('-');
+    val = -val;
+  }
+  p.print((long)val);
+  if (prec > 0) {
+    p.print('.');
+    float frac = val - (long)val;
+    while (prec--) {
+      frac *= 10;
+      p.print((int)frac);
+      frac -= (int)frac;
+    }
+  }
+}
 #include "buttons.h"
 #include "buzzer.h"
 #include "config.h"
@@ -18,19 +36,23 @@ bool silentMode = false;
 unsigned long measurementCount = 0;
 unsigned long faultyCount = 0;
 
-// Função para calibração das ponteiras
+extern Adafruit_ILI9341 tft;
+
+void showBackMsg() {
+  tft.setTextSize(1);
+  tft.setCursor(10, 80);
+  tft.println(F("BCK exits"));
+}
 void calibrate_probes() {
   tft.fillScreen(ILI9341_BLACK);
   tft.setTextColor(ILI9341_WHITE, ILI9341_BLACK);
   tft.setTextSize(2);
   tft.setCursor(10, 10);
-  tft.println(F("Calibracao de Probes"));
+  tft.println(F("Calibragem"));
 
   tft.setTextSize(1);
   tft.setCursor(10, 40);
-  tft.println(F("Encoste as ponteiras"));
-  tft.setCursor(10, 60);
-  tft.println(F("Pressione OK para iniciar"));
+  tft.println(F("OK p/ iniciar"));
 
   bool calibrating = true;
   while (calibrating) {
@@ -45,15 +67,15 @@ void calibrate_probes() {
       // Armazena offsets (em um projeto real, salvaria na EEPROM)
       tft.fillScreen(ILI9341_BLACK);
       tft.setCursor(10, 10);
-      tft.println(F("Calibracao concluida!"));
+      tft.println(F("Calib OK"));
       tft.setCursor(10, 40);
-      tft.print(F("Offset1: "));
-      tft.print(offset1, 3);
-      tft.println(F("V"));
+      tft.print(F("O1: "));
+      fprint(tft, offset1, 2);
+      tft.println('V');
       tft.setCursor(10, 60);
-      tft.print(F("Offset2: "));
-      tft.print(offset2, 3);
-      tft.println(F("V"));
+      tft.print(F("O2: "));
+      fprint(tft, offset2, 2);
+      tft.println('V');
 
       delay(2000);
       calibrating = false;
