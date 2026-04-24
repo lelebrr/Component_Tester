@@ -1,79 +1,91 @@
 // ============================================================================
-// Component Tester PRO v3.0 — Utilitários
-// Descrição: Funções auxiliares gerais
+// Component Tester PRO v3.0 — Utilitários (Header)
 // ============================================================================
 #ifndef UTILS_H
 #define UTILS_H
 
+#include <Arduino.h>
+#include <TFT_eSPI.h>
 #include <stdint.h>
 
 // ============================================================================
-// STRINGS
+// STRINGS — Sem String class
 // ============================================================================
-
-// Verifica se uma string é vazia
 bool str_is_empty(const char* s);
-
-// Trim (remove espaços do início e fim)
 void str_trim(char* s);
-
-// Converte para maiúsculas
 void str_upper(char* s);
-
-// Converte para minúsculas
 void str_lower(char* s);
 
 // ============================================================================
-// NÚMEROS
+// MATH — Funções inline
 // ============================================================================
-
-// Arredonda para o valor mais próximo
-float round_to(float value, float step);
-
-// Clamp genérico
-float clamp_float(float value, float minVal, float maxVal);
-int clamp_int(int value, int minVal, int maxVal);
+inline float clamp_float(float v, float mn, float mx);
+inline int clamp_int(int v, int mn, int mx);
+inline float round_to(float v, float step);
 
 // ============================================================================
-// TEMPO
+// TEMPO — Funções inline
 // ============================================================================
-
-// millis() com overflow seguro (como micros())
-unsigned long elapsed_since(unsigned long startMs);
-
-// Verifica se passou o tempo
-bool has_elapsed(unsigned long startMs, unsigned long timeoutMs);
+inline unsigned long elapsed_since(unsigned long start);
+inline bool has_elapsed(unsigned long start, unsigned long period);
 
 // ============================================================================
-// DISPLAY
+// ADC — Funções de leitura
 // ============================================================================
-
-// Limpa uma área retangular com a cor de fundo
-void clear_area(int16_t x, int16_t y, int16_t w, int16_t h);
-
-// Desenha centered text
-void draw_centered_text(const char* text, int16_t x, int16_t y,
-                       uint16_t color, uint8_t size);
+inline uint16_t adc_read_raw_p1();
+inline uint16_t adc_read_raw_zmpt();
+inline float adc_to_volts(uint16_t raw);
 
 // ============================================================================
-// ARDUINO HELPERS (que podem não estar disponíveis)
+// DEBOUNCE — Classe Debouncer
 // ============================================================================
+class Debouncer {
+private:
+    unsigned long _last_time;
+    uint8_t _state;
+    uint8_t _pin;
+    uint8_t _threshold;
+    
+public:
+    Debouncer();
+    void begin(uint8_t pin, uint8_t threshold = 1);
+    inline bool pressed();
+    inline bool is_down() const;
+};
 
-#ifndef constrain
-#define constrain(v, mn, mx) ((v) < (mn) ? (mn) : ((v) > (mx) ? (mx) : (v)))
+// ============================================================================
+// MOVING AVERAGE — Filtro de média móvel
+// ============================================================================
+template <uint8_t N>
+class MovingAverage {
+private:
+    float _buffer[N];
+    uint8_t _idx;
+    uint8_t _count;
+    float _sum;
+    
+public:
+    MovingAverage();
+    inline float update(float value);
+    inline float get() const;
+    inline void reset();
+    inline uint8_t count() const;
+};
+
+// ============================================================================
+// LOW-PASS FILTER — Filtro IIR
+// ============================================================================
+class LowPass {
+private:
+    float _value;
+    float _alpha;
+    
+public:
+    LowPass();
+    void set_alpha(float a);
+    inline float update(float input);
+    inline float get() const;
+    inline void reset(float v = 0.0f);
+};
+
 #endif
-
-#ifndef map
-#define map(v, in_min, in_max, out_min, out_max) \
-    ((v - in_min) * (out_max - out_min) / (in_max - in_min) + out_min)
-#endif
-
-#ifndef min
-#define min(a, b) ((a) < (b) ? (a) : (b))
-#endif
-
-#ifndef max
-#define max(a, b) ((a) > (b) ? (a) : (b))
-#endif
-
-#endif // UTILS_H
