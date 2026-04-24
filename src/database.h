@@ -41,6 +41,7 @@ struct ComponentDB {
 #define CAT_SCHOTTKY      7
 #define CAT_LED           8
 #define CAT_CAPACITOR     9
+#define CAT_CAP_ELECTRO   100   // Categoria virtual para ícone
 #define CAT_RESISTOR      10
 #define CAT_INDUCTOR      11
 #define CAT_OPTOCOUPLER   12

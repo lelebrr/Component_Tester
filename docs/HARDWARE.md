@@ -3,7 +3,7 @@
 O hardware do **Component Tester PRO** foi projetado para ser modular, utilizando a placa **ESP32-2432S028R (CYD)** como unidade central de processamento e interface.
 
 <p align="center">
-  <img src="../hardware_components_collage_1777037887267.png" alt="Hardware Components" width="700">
+  <img src="../assets/hardware_layout.png" alt="Hardware Components" width="700">
 </p>
 
 ---

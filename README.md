@@ -1,7 +1,7 @@
 # 🚀 Component Tester PRO v3.0 — CYD Edition
 
 <p align="center">
-  <img src="component_tester_hero_1777037867137.png" alt="Component Tester PRO v3.0 Hero" width="800">
+  <img src="assets/hero.png" alt="Component Tester PRO v3.0 Hero" width="800">
 </p>
 
 <p align="center">

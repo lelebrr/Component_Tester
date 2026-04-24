@@ -306,6 +306,15 @@ void drawComponentIcon(uint8_t componentType, int x, int y, uint16_t color) {
       tft.drawLine(x + 15, y + 12, x + 25, y + 12, color);
       tft.drawLine(x + 15, y + 28, x + 25, y + 28, color);
       break;
+    
+    case 12: // Optoacoplador (CAT_OPTOCOUPLER)
+      tft.drawRect(x + 5, y + 5, 30, 30, color);
+      tft.drawCircle(x + 13, y + 15, 4, color); // Lado LED
+      tft.drawLine(x + 17, y + 15, x + 25, y + 15, color); // Seta de acoplamento
+      tft.drawLine(x + 22, y + 12, x + 25, y + 15, color);
+      tft.drawLine(x + 22, y + 18, x + 25, y + 15, color);
+      tft.drawLine(x + 28, y + 10, x + 28, y + 30, color); // Lado Transistor
+      break;
 
     case 11: // Indutor
       for (int i = 0; i < 4; i++) {
