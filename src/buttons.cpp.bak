@@ -1,6 +1,5 @@
 // ============================================================================
-// Component Tester PRO v3.0 — Botões e Touchscreen (Implementação)
-// Descrição: Leitura do touchscreen XPT2046 e botões físicos
+// Component Tester PRO v3.0 — Botões e Touchscreen (TFT_eSPI)
 // ============================================================================
 
 #include "buttons.h"
@@ -8,9 +7,6 @@
 #include "buzzer.h"
 #include "config.h"
 
-// ============================================================================
-// VARIÁVEIS DE ESTADO
-// ============================================================================
 static bool touchPressedLast = false;
 static unsigned long touchPressTimeMs = 0;
 static unsigned long touchDebounceMs = 0;
@@ -23,17 +19,10 @@ static ButtonState physButtonState[BTN_TOTAL] = { BTN_STATE_IDLE };
 static TouchPoint lastTouchPoint = { 0, 0, 0 };
 static bool touchActive = false;
 
-// ============================================================================
-// INICIALIZAÇÃO
-// ============================================================================
 void buttons_init() {
-    DBG_PRINTLN("[BTN] Inicializando sistema de entrada...");
+    LOG_SERIAL_F("Buttons init...");
 
-    // Touchscreen — inicializado em main.cpp via ts.begin()
-    // Mas garantimos que os pinos estejam como OUTPUTs se necessário
-
-    // Botões físicos
-#if HAS_PHYSICAL_BUTTONS
+    #if HAS_PHYSICAL_BUTTONS
     pinMode(BTN_UP, INPUT_PULLUP);
     pinMode(BTN_DOWN, INPUT_PULLUP);
     pinMode(BTN_LEFT, INPUT_PULLUP);
@@ -46,65 +35,39 @@ void buttons_init() {
         physButtonPressTime[i] = 0;
         physButtonDebounce[i] = 0;
     }
-#endif
+    #endif
 
-    DBG_PRINTLN("[BTN] Sistema de entrada pronto");
+    LOG_SERIAL_F("Buttons OK");
 }
 
-// ============================================================================
-// TOUCHSCREEN — POLLING
-// ============================================================================
 bool touch_is_pressed() {
-    TS_Point p = ts.getPoint();
-    return (p.z > TOUCH_MIN_Z);
+    uint16_t tx, ty;
+    return tft.getTouch(&tx, &ty);
 }
 
 TouchPoint touch_get_raw_point() {
-    TS_Point p = ts.getPoint();
     TouchPoint tp;
-    tp.x = p.x;
-    tp.y = p.y;
-    tp.z = p.z;
+    tft.getTouch(&tp.x, &tp.y);
+    tp.z = 1;
     return tp;
 }
 
 TouchPoint touch_get_point() {
-    TS_Point p = ts.getPoint();
     TouchPoint tp;
+    uint16_t tx, ty;
 
-    if (p.z > TOUCH_MIN_Z) {
-        // Mapeia as coordenadas do touchscreen para a tela
-        // A rotação 1 do XPT2046 mapeia:
-        // X: 0-4096 → 0-320
-        // Y: 0-4096 → 0-240
-        if (TOUCH_XY_SWAP) {
-            tp.x = map(p.y, TOUCH_Y_MIN, TOUCH_Y_MAX, 0, 320);
-            tp.y = map(p.x, TOUCH_X_MIN, TOUCH_X_MAX, 0, 240);
-        } else {
-            tp.x = map(p.x, TOUCH_X_MIN, TOUCH_X_MAX, 0, 320);
-            tp.y = map(p.y, TOUCH_Y_MIN, TOUCH_Y_MAX, 0, 240);
-        }
-
-        if (TOUCH_X_INVERT) {
-            tp.x = 320 - tp.x;
-        }
-        if (TOUCH_Y_INVERT) {
-            tp.y = 240 - tp.y;
-        }
-
-        tp.z = p.z;
+    if (tft.getTouch(&tx, &ty)) {
+        tp.x = tx;
+        tp.y = ty;
+        tp.z = 1;
     } else {
         tp.x = 0;
         tp.y = 0;
         tp.z = 0;
     }
-
     return tp;
 }
 
-// ============================================================================
-// BOTÕES FÍSICOS — LEITURA
-// ============================================================================
 #if HAS_PHYSICAL_BUTTONS
 static bool read_phys_button(int btnId) {
     int pin = -1;
@@ -121,14 +84,10 @@ static bool read_phys_button(int btnId) {
 }
 #endif
 
-// ============================================================================
-// ATUALIZAÇÃO (chamar no loop)
-// ============================================================================
 void buttons_update() {
     unsigned long now = millis();
     bool touchNow = touch_is_pressed();
 
-    // --- Touch debounce ---
     if (touchNow && !touchPressedLast) {
         touchDebounceMs = now;
     }
@@ -137,16 +96,14 @@ void buttons_update() {
     }
     touchActive = touchNow;
 
-    // --- Botões físicos ---
-#if HAS_PHYSICAL_BUTTONS
+    #if HAS_PHYSICAL_BUTTONS
     for (int i = 0; i < BTN_TOTAL; i++) {
-        if (i == BTN_TOUCH) continue; // Skip touch
+        if (i == BTN_TOUCH) continue;
 
         bool pressed = read_phys_button(i);
         unsigned long elapsed = now - physButtonPressTime[i];
 
         if (pressed && !physButtonLast[i]) {
-            // Borda de subida detectada
             if (now - physButtonDebounce[i] > DEBOUNCE_MS) {
                 physButtonPressTime[i] = now;
                 physButtonState[i] = BTN_STATE_PRESSED;
@@ -154,7 +111,6 @@ void buttons_update() {
             }
         } else if (pressed && (elapsed > LONG_PRESS_MS) &&
                  physButtonState[i] == BTN_STATE_PRESSED) {
-            // Transição para hold
             physButtonState[i] = BTN_STATE_HOLD;
         } else if (!pressed) {
             physButtonState[i] = BTN_STATE_IDLE;
@@ -162,25 +118,22 @@ void buttons_update() {
 
         physButtonLast[i] = pressed;
     }
-#endif
+    #endif
 }
 
-// ============================================================================
-// QUERY DE AÇÃO (detecta borda de subida)
-// ============================================================================
 bool btn_just_pressed(int btnId) {
     if (btnId == BTN_TOUCH) {
         return touchActive && !touchPressedLast &&
                (millis() - touchDebounceMs > TOUCH_DEBOUNCE_MS);
     }
 
-#if HAS_PHYSICAL_BUTTONS
+    #if HAS_PHYSICAL_BUTTONS
     if (physButtonState[btnId] == BTN_STATE_PRESSED) {
-        physButtonState[btnId] = BTN_STATE_HOLD; // Marca como "consumido"
+        physButtonState[btnId] = BTN_STATE_HOLD;
         touchPressedLast = true;
         return true;
     }
-#endif
+    #endif
     return false;
 }
 
@@ -188,19 +141,19 @@ bool btn_is_pressed(int btnId) {
     if (btnId == BTN_TOUCH) {
         return touchActive;
     }
-#if HAS_PHYSICAL_BUTTONS
+    #if HAS_PHYSICAL_BUTTONS
     return read_phys_button(btnId);
-#else
+    #else
     return false;
-#endif
+    #endif
 }
 
 bool btn_long_pressed(int btnId) {
-#if HAS_PHYSICAL_BUTTONS
+    #if HAS_PHYSICAL_BUTTONS
     return physButtonState[btnId] == BTN_STATE_HOLD;
-#else
+    #else
     return false;
-#endif
+    #endif
 }
 
 bool btn_long_pressed_any() {

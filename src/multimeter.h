@@ -1,6 +1,7 @@
 // ============================================================================
-// Component Tester PRO v3.0 — Multímetro AC/DC com True RMS
-// Descrição: Medições de tensão e corrente usando ZMPT101B e INA219
+// Component Tester PRO v3.0 - Multimestro AC/DC com True RMS
+// Descricao: Medicoes de tensao e corrente usando ZMPT101B e INA219
+// Versao: CYD Edition para ESP32-2432S028R
 // ============================================================================
 #ifndef MULTIMETER_H
 #define MULTIMETER_H
@@ -8,19 +9,19 @@
 #include <stdint.h>
 
 // ============================================================================
-// MODOS DO MULTÍMETRO
+// MODOS DO MULTIMETRO
 // ============================================================================
 enum MultimeterMode {
-    MMODE_DC_VOLTAGE = 0,  // Tensão DC (INA219)
-    MMODE_AC_VOLTAGE  = 1,  // Tensão AC (ZMPT101B)
+    MMODE_DC_VOLTAGE = 0,  // Tensao DC (INA219)
+    MMODE_AC_VOLTAGE  = 1,  // Tensao AC (ZMPT101B)
     MMODE_DC_CURRENT = 2,  // Corrente DC (INA219)
     MMODE_AC_CURRENT = 3,  // Corrente AC (estimado)
-    MMODE_RESISTANCE = 4,  // Resistência (ADC)
+    MMODE_RESISTANCE = 4,  // Resistencia (ADC)
     MMODE_CONTINUITY = 5   // Continuidade
 };
 
 // ============================================================================
-// RESULTADO DE MEDIÇÃO
+// RESULTADO DE MEDICAO
 // ============================================================================
 struct MultimeterReading {
     float value;
@@ -32,16 +33,16 @@ struct MultimeterReading {
 };
 
 // ============================================================================
-// PROTÓTIPOS
+// PROTOTIPOS
 // ============================================================================
 
-// Inicialização dos sensores
+// Inicializacao dos sensores
 void multimeter_init();
 
-// Leitura de tensão DC
+// Leitura de tensao DC
 float multimeter_read_dc_voltage();
 
-// Leitura de tensão AC (True RMS)
+// Leitura de tensao AC (True RMS)
 float multimeter_read_ac_voltage();
 
 // Leitura de corrente DC (INA219)
@@ -57,13 +58,13 @@ MultimeterReading multimeter_read();
 void multimeter_set_mode(MultimeterMode mode);
 MultimeterMode multimeter_get_mode();
 
-// Calibração do ZMPT101B
+// Calibracao do ZMPT101B
 void multimeter_calibrate_zmpt(float measuredRealVoltage);
 
 // Handle da UI (loop)
 void multimeter_handle();
 
-// Desenhar tela do multímetro
+// Desenhar tela do multimetro
 void multimeter_draw(const MultimeterReading* reading);
 
 // True RMS calculation helper

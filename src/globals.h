@@ -1,78 +1,59 @@
 // ============================================================================
-// Component Tester PRO v3.0 — Variáveis Globais e Estruturas
-// Descrição: Definições globais compartilhadas entre todos os módulos
+// Component Tester PRO v3.0 - Variaveis Globais
+// Descricao: Variaveis globais compartilhadas entre modulos
+// Versao: CYD Edition para ESP32-2432S028R
 // ============================================================================
 #ifndef GLOBALS_H
 #define GLOBALS_H
 
+#include <Arduino.h>
 #include "config.h"
+#include "database.h"
 
 // ============================================================================
-// ESTADO DA APLICAÇÃO
+// ESTADO DA APLICACAO (maquina de estados)
 // ============================================================================
-#ifndef AppState
-typedef enum AppState {
-    STATE_SPLASH            = 0,
+enum AppState {
+    STATE_SPLASH           = 0,
     STATE_MENU              = 1,
-    STATE_MEASURE_RESISTOR   = 10,
-    STATE_MEASURE_CAPACITOR  = 11,
-    STATE_MEASURE_DIODE      = 12,
+
+    // Modo Component Tester
+    STATE_MEASURE_RESISTOR  = 10,
+    STATE_MEASURE_CAPACITOR = 11,
+    STATE_MEASURE_DIODE     = 12,
     STATE_MEASURE_TRANSISTOR = 13,
     STATE_MEASURE_INDUCTOR   = 14,
-    STATE_MEASURE_IC        = 15,
+    STATE_MEASURE_IC         = 15,
     STATE_MEASURE_GENERIC   = 19,
+
+    // Modo Multimestro
     STATE_MULTIMETER        = 20,
-    STATE_THERMAL_PROBE      = 30,
-    STATE_SCANNER          = 31,
-    STATE_CALIBRATION      = 32,
-    STATE_SETTINGS        = 40,
-    STATE_ABOUT           = 41,
-    STATE_HISTORY         = 42,
-    STATE_STATS           = 43
-} AppState;
-#endif
+
+    // Ferramentas
+    STATE_THERMAL_PROBE     = 30,
+    STATE_SCANNER           = 31,
+    STATE_CALIBRATION       = 32,
+
+    // Configuracoes e Info
+    STATE_SETTINGS         = 40,
+    STATE_ABOUT             = 41,
+    STATE_HISTORY            = 42,
+    STATE_STATS              = 43
+};
+
+// Estado atual e anterior
+extern volatile AppState currentAppState;
+extern volatile AppState previousAppState;
 
 // ============================================================================
-// INSTÂNCIA GLOBAL DO TFT
+// CONTROLE DE TEMPO
 // ============================================================================
-#ifndef TFT_GLOBAL_DECL
-#define TFT_GLOBAL_DECL
-extern Adafruit_ILI9341 tft;
-#endif
-
-// ============================================================================
-// INSTÂNCIA GLOBAL DO TOUCH
-// ============================================================================
-extern XPT2046_Touchscreen ts;
-
-// ============================================================================
-// CONTROLE DE ENERGIA
-// ============================================================================
-extern unsigned long lastActivityMs;
+extern unsigned long lastActivityMs;       // Ultima interacao do usuario
+extern unsigned long backlightOffTimeMs;   // Quando desligar o backlight
 extern bool backlightOn;
 
 // ============================================================================
-// CONFIGURAÇÕES DO DISPOSITIVO
-// ============================================================================
-struct Settings {
-    uint8_t backlight;
-    bool darkMode;
-    bool silentMode;
-    bool autoSleep;
-    unsigned long autoSleepMs;
-    bool soundEnabled;
-    bool calibrated;
-};
-extern Settings deviceSettings;
-
-// ============================================================================
-// CALIBRAÇÃO DOS PROBES
-// ============================================================================
-extern float probeOffsetResistance;
-extern float probeOffsetCapacitance;
-
-// ============================================================================
-// MEDIÇÕES ATUAIS
+// MEDICOES ATUAIS
 // ============================================================================
 extern float lastResistance;
 extern float lastCapacitance;
@@ -82,11 +63,22 @@ extern float lastCurrent;
 extern float lastTemperature;
 
 // ============================================================================
-// ESTATÍSTICAS
+// ESTATISTICAS
 // ============================================================================
 extern uint32_t totalMeasurements;
 extern uint32_t goodMeasurements;
 extern uint32_t badMeasurements;
+
+// ============================================================================
+// CALIBRACAO DOS PROBES
+// ============================================================================
+extern float probeOffsetResistance;
+extern float probeOffsetCapacitance;
+
+// ============================================================================
+// BANCO DE DADOS NA RAM
+// ============================================================================
+extern ComponentDatabase componentDB;
 
 // ============================================================================
 // SD CARD
@@ -95,112 +87,77 @@ extern bool sdCardPresent;
 extern bool sdCardError;
 
 // ============================================================================
-// BANCO DE DADOS
+// DISPLAY TFT
 // ============================================================================
-#define MAX_DB_COMPONENTS 200
-struct DbItem {
-    uint8_t type;
-    char name[20];
-    char unit[8];
-    float minGood;
-    float maxGood;
-};
-struct ComponentDatabase {
-    int count;
-    DbItem items[MAX_DB_COMPONENTS];
-};
-extern ComponentDatabase componentDB;
+extern bool tftInitialized;
 
 // ============================================================================
-// RESULTADOS FREE RTOS
+// BOTOES
 // ============================================================================
-struct MeasurementResult {
+enum Button {
+    BTN_NONE     = 0,
+    BTN_UP       = 1,
+    BTN_DOWN     = 2,
+    BTN_LEFT     = 3,
+    BTN_RIGHT    = 4,
+    BTN_OK       = 5,
+    BTN_BACK     = 6
+};
+
+// ============================================================================
+// MENSAGENS DE DISPLAY (FreeRTOS)
+// ============================================================================
+enum DisplayMsgType {
+    MSG_NONE = 0,
+    MSG_TEMPERATURE = 1,
+    MSG_MEASUREMENT = 2,
+    MSG_ERROR = 3
+};
+
+typedef struct {
+    DisplayMsgType type;
+    float value;
+    char text[32];
+} DisplayMessage;
+
+// ============================================================================
+// RESULTADO DE MEDICAO
+// ============================================================================
+typedef struct {
     float resistance;
     float capacitance;
     float inductance;
-    uint8_t componentType;
-    uint8_t status;
-};
-struct DisplayMessage {
-    uint8_t type;
-    float value;
-    const char* text;
-};
-#define MSG_TEMPERATURE 1
-#define MSG_ALERT 2
-#define MSG_RESULT 3
-#define MSG_PROGRESS 4
-struct LogEntry {
+    float voltage;
+    float current;
+    ComponentType componentType;
+    ComponentStatus status;
+    unsigned long timestamp;
+} MeasurementResult;
+
+// ============================================================================
+// ENTRADA DE LOG
+// ============================================================================
+typedef struct {
     unsigned long timestamp;
     char componentName[20];
     float value;
-    const char* status;
-};
+    char status[10];
+} LogEntry;
 
 // ============================================================================
-// CONTROLE DE LEDs / BUZZER
+// CONFIGURACOES DO DISPOSITIVO
 // ============================================================================
-extern unsigned long ledFlashTimer;
-extern unsigned long ledFlashInterval;
-extern unsigned long ledFlashPhase;
-extern bool flashingLeds;
-extern unsigned long buzzerStartTime;
-extern unsigned long buzzerDuration;
+typedef struct {
+    uint8_t backlight;           // 0-255
+    bool darkMode;
+    bool silentMode;
+    bool autoSleep;
+    unsigned long autoSleepMs;
+    bool soundEnabled;
+    bool calibrated;
+    float zmptScaleFactor;
+} DeviceSettings;
 
-// ============================================================================
-// HISTÓRICO
-// ============================================================================
-struct MeasurementHistory {
-    unsigned long timestamp;
-    char name[20];
-    float value;
-    float temp;
-    uint8_t status;
-};
-extern MeasurementHistory measurementHistory[HISTORY_SIZE];
-extern int historyIndex;
-extern int historyCount;
-
-// ============================================================================
-// PROTÓTIPOS GLOBAIS
-// ============================================================================
-void loadSettings();
-void saveSettings();
-void addToHistory(const char* name, float value, float temp, uint8_t status);
-void buzzer_beep(unsigned int freq);
-void buzzer_beep_pattern(const uint16_t* pattern, size_t len);
-void led_set_rgb(uint8_t r, uint8_t g, uint8_t b);
-void led_flash_rgb(uint8_t r, uint8_t g, uint8_t b,
-                 unsigned long onMs, unsigned long offMs);
-
-// Funções auxiliares
-void format_measurement_value(float value, const char* unit,
-                             char* output, size_t maxLen);
-void menu_refresh();
-void menu_back();
-
-// Estado global (main loop precisa)
-extern AppState currentAppState;
-extern AppState previousAppState;
-
-// Protótipos do main.cpp que outros módulos usam
-void backlight_on();
-void backlight_off();
-void systemReset();
-
-// DB (database.cpp)
-bool sd_load_database();
-const char* db_status_string(ComponentStatus status);
-ComponentStatus db_judge(ComponentType type, float value);
-
-// Sensors
-float thermal_read_async();
-
-// LED RGB
-void led_off();
-
-// Botões
-bool btn_just_pressed(int btnId);
-int menu_process_touch();
+extern DeviceSettings deviceSettings;
 
 #endif // GLOBALS_H

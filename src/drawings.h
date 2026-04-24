@@ -1,57 +1,60 @@
 // ============================================================================
-// Component Tester PRO v3.0 — Funções Gráficas (CYD Edition)
+// Component Tester PRO v3.0 - Desenhos e Icons
+// Descricao: Funcoes graficas para display Adafruit ILI9341
+// Versao: CYD Edition para ESP32-2432S028R
 // ============================================================================
 #ifndef DRAWINGS_H
 #define DRAWINGS_H
 
 #include <Arduino.h>
-#include <TFT_eSPI.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_ILI9341.h>
 
 // ============================================================================
-// INSTÂNCIA GLOBAL DO TFT (definida em main.cpp)
+// INSTANCIA GLOBAL DO TFT (definida em main.cpp)
 // ============================================================================
-extern TFT_eSPI tft;
+extern Adafruit_ILI9341 tft;
 
 // ============================================================================
-// FUNÇÕES DE UI MODERNAS
+// FUNCOES DE UI MODERNAS
 // ============================================================================
-// Barra de status superior (versão, temperatura, ícone SD)
+
+// Barra de status superior (versao, temperatura, icone SD)
 void draw_status_bar();
 
-// Rodapé com dicas de navegação
+// Rodape com dicas de navegacao
 void draw_footer_modern();
 
-// Item do grid de menu (card com ícone e label)
-void draw_grid_item(int x, int y, const char* label, int iconId, bool selected);
+// Item do grid de menu (card com icone e label)
+void draw_grid_item(int16_t x, int16_t y, const char* label, int iconId, bool selected);
 
-// Card moderno com título e borda colorida
+// Card moderno com titulo e borda colorida
 void draw_modern_card(const char* title, uint16_t color);
 
 // ============================================================================
-// ÍCONES LEGADOS (retro-compatibilidade)
+// ICONES LEGADOS (retro-compatibilidade)
 // ============================================================================
-void draw_capacitor_icon(int x, int y);
-void draw_resistor_icon(int x, int y);
-void draw_diode_icon(int x, int y);
-void draw_led_icon(int x, int y, uint16_t color);
-void draw_transistor_icon(int x, int y);
-void draw_inductor_icon(int x, int y);
+void draw_capacitor_icon(int16_t x, int16_t y);
+void draw_resistor_icon(int16_t x, int16_t y);
+void draw_diode_icon(int16_t x, int16_t y);
+void draw_led_icon(int16_t x, int16_t y, uint16_t color);
+void draw_transistor_icon(int16_t x, int16_t y);
+void draw_inductor_icon(int16_t x, int16_t y);
 
 // ============================================================================
-// ÍCONES DINÂMICOS DE COMPONENTES (sistema de ícones vetoriais)
-// ============================================================================
-// Tipo extra para capacitor eletrolítico (visual diferenciado)
+// ICONES DINAMICOS DE COMPONENTES (sistema de icones vetoriais)
+// Tipo extra para capacitor eletrolitico (visual diferenciado)
 #define CAT_CAP_ELECTRO 100
 
-// Desenha o ícone de um componente baseado no seu tipo (categoria do database)
-void drawComponentIcon(uint8_t componentType, int x, int y, uint16_t color);
+// Desenha o icone de um componente baseado no seu tipo (categoria do database)
+void drawComponentIcon(uint8_t componentType, int16_t x, int16_t y, uint16_t color);
 
-// Desenha ícone + label textual abaixo
-void drawComponentWithLabel(uint8_t componentType, int x, int y, uint16_t color, const char* label);
+// Desenha icone + label textual abaixo
+void drawComponentWithLabel(uint8_t componentType, int16_t x, int16_t y, uint16_t color, const char* label);
 
 // ============================================================================
-// ÍCONES DO MENU PRINCIPAL
+// ICONES DO MENU PRINCIPAL
 // ============================================================================
-void draw_menu_icon(int x, int y, int iconId, uint16_t color);
+void draw_menu_icon(int16_t x, int16_t y, int iconId, uint16_t color);
 
 #endif // DRAWINGS_H

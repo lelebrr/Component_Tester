@@ -1,26 +1,22 @@
 // ============================================================================
-// Component Tester PRO v3.0 — Multímetro AC/DC (Implementação)
-// Descrição: ZMPT101B para AC, INA219 para DC
+// Component Tester PRO v3.0 - Multimestro AC/DC (Implementacao)
+// Descricao: ZMPT101B para AC, INA219 para DC
+// Versao: CYD Edition para ESP32-2432S028R
 // ============================================================================
 
 #include "multimeter.h"
-#include "globals.h"
 #include "config.h"
-#include "buzzer.h"
-#include "leds.h"
-#include "graphics.h"
-#include <INA219.h>
 #include <Wire.h>
+#include <Adafruit_INA219.h>
+#include <math.h>
 
 // ============================================================================
-// INSTÂNCIAS
+// INSTANCIAS E VARIAVEIS
 // ============================================================================
-static INA219 ina219;
+static Adafruit_INA219 ina219;
 static bool ina219Initialized = false;
 
-// ============================================================================
-// ESTADO DO MULTÍMETRO
-// ============================================================================
+// Estado do multimetro
 static MultimeterMode currentMode = MMODE_DC_VOLTAGE;
 static MultimeterReading currentReading;
 
@@ -29,75 +25,88 @@ static float acSamples[ZMPT_SAMPLES];
 static int acSampleIndex = 0;
 static unsigned long lastAcReadMs = 0;
 
+// Variavel externa (definida em main.cpp)
+extern float lastActivityMs;
+
 // ============================================================================
-// INICIALIZAÇÃO
+// INICIALIZACAO
 // ============================================================================
 void multimeter_init() {
-    DBG_PRINTLN("[MULTI] Inicializando multímetro...");
+    DBG_PRINTLN("[MULTI] Inicializando multimetro...");
 
     // INA219 para DC
     Wire.begin(PIN_I2C_SDA, PIN_I2C_SCL);
-    ina219.begin();
-    ina219Initialized = ina219.begin();
-
-    if (ina219Initialized) {
-        ina219.configure(INA219_BRNG_32V, INA219_PG_320mA,
-                           INA219_ADC_12BIT, INA219_ADC_12BIT, 1);
-        ina219.calibrate(INA219_SHUNT_R * 1000.0f, 320.0f,
-                           INA219_SHUNT_R, 3.3f);
+    
+    // Tenta inicializar o INA219
+    uint8_t addr = INA219_I2C_ADDR;
+    Wire.beginTransmission(addr);
+    if (Wire.endTransmission() == 0) {
+        ina219Initialized = true;
+        ina219.begin(addr);
+        
+        // Configuracao do INA219
+        // BRNG_32V = range de 32V
+        // PG_320mA = gain de 320mA
+        // ADC_12BIT = 12 bits de resolucao
+        ina219.setCalibration_32V_2A();
+        
         DBG_PRINTLN("[MULTI] INA219 OK");
     } else {
-        DBG_PRINTLN("[MULTI] INA219 não encontrado");
+        DBG_PRINTLN("[MULTI] INA219 nao encontrado");
+        ina219Initialized = false;
     }
 
     currentMode = MMODE_DC_VOLTAGE;
-    DBG_PRINTLN("[MULTI] Multímetro pronto");
+    DBG_PRINTLN("[MULTI] Multimestro pronto");
 }
 
 // ============================================================================
 // LEITURAS DC (INA219)
 // ============================================================================
 float multimeter_read_dc_voltage() {
-    if (!ina219Initialized) return 0;
+    if (!ina219Initialized) return 0.0f;
     return ina219.getBusVoltage_V();
 }
 
 float multimeter_read_dc_current() {
-    if (!ina219Initialized) return 0;
+    if (!ina219Initialized) return 0.0f;
     return ina219.getCurrent_mA();
 }
 
 // ============================================================================
 // LEITURAS AC (ZMPT101B)
-// Usa amostragem rápida e cálculo de True RMS
+// Usa amostragem rapida e calculo de True RMS
 // ============================================================================
 float multimeter_read_ac_voltage() {
     unsigned long startUs = micros();
     int count = 0;
-    float sumSq = 0;
+    float sumSq = 0.0f;
     int raw;
     float v;
 
-    // Coleta amostras até o timeout
+    // Coleta amostras
     while (count < ZMPT_SAMPLES) {
         raw = analogRead(PIN_ZMPT_AC);
+        // Converte para tensao (0-3.3V -> 0-4095)
         v = ((float)raw - ZMPT_ZERO_POINT) * ADC_VOLTS_PER_BIT;
         sumSq += v * v;
         acSamples[count] = v;
         count++;
 
-        // Taxa de amostragem
-        while ((micros() - startUs) < (ZMPT_SAMPLE_PERIOD / ZMPT_SAMPLES)) {
+        // Taxa de amostragem - espera pelo proximo sample
+        // Tempo por sample = 1 segundo / taxa
+        while ((micros() - startUs) < (1000000UL / ZMPT_SAMPLE_RATE)) {
             // Busy-wait para timing preciso
         }
         startUs = micros();
     }
 
-    // RMS = sqrt(soma(V²) / N)
-    float rms = sqrt(sumSq / count);
+    // RMS = sqrt(soma(V^2) / N)
+    float rms = sqrt(sumSq / (float)count);
 
-    // Escala para tensão de linha (220V RMS → 311V pico)
-    float vrms = rms * ZMPT_SCALE_FACTOR / ZMPT_ZERO_POINT;
+    // Escala para tensao de linha (220V RMS -> 311V pico)
+    // Fator de escala baseado na calibracao
+    float vrms = rms * ZMPT_SCALE_FACTOR / (float)ZMPT_ZERO_POINT;
     return vrms;
 }
 
@@ -105,12 +114,12 @@ float multimeter_read_ac_voltage() {
 // TRUE RMS CALCULATION
 // ============================================================================
 float calculate_true_rms(float* samples, int count) {
-    if (count <= 0) return 0;
-    float sumSq = 0;
+    if (count <= 0) return 0.0f;
+    float sumSq = 0.0f;
     for (int i = 0; i < count; i++) {
         sumSq += samples[i] * samples[i];
     }
-    return sqrt(sumSq / count);
+    return sqrt(sumSq / (float)count);
 }
 
 // ============================================================================
@@ -126,15 +135,15 @@ MultimeterReading multimeter_read() {
         case MMODE_DC_VOLTAGE:
             r.value = multimeter_read_dc_voltage();
             r.unit = "V";
-            r.statusColor = (r.value > 30) ?
-                              UI_COLORS::DANGER : UI_COLORS::SUCCESS;
+            r.statusColor = (r.value > 30.0f) ? 
+                UI_COLORS::DANGER : UI_COLORS::SUCCESS;
             break;
 
         case MMODE_AC_VOLTAGE:
             r.value = multimeter_read_ac_voltage();
             r.unit = "V";
-            r.statusColor = (r.value > 250) ?
-                              UI_COLORS::WARNING : UI_COLORS::SUCCESS;
+            r.statusColor = (r.value > 250.0f) ? 
+                UI_COLORS::WARNING : UI_COLORS::SUCCESS;
             break;
 
         case MMODE_DC_CURRENT:
@@ -143,8 +152,45 @@ MultimeterReading multimeter_read() {
             r.statusColor = UI_COLORS::SUCCESS;
             break;
 
+        case MMODE_AC_CURRENT:
+            // Corrente AC estimada baseada na tensao AC
+            // Assumindo carga resistiva (I = V / R)
+            {
+                float vac = multimeter_read_ac_voltage();
+                r.value = vac / 220.0f; // Assumindo 220 ohms
+                r.unit = "A";
+                r.statusColor = UI_COLORS::SUCCESS;
+            }
+            break;
+
+        case MMODE_RESISTANCE:
+            // Resistencia medida via ADC
+            {
+                int raw = analogRead(PIN_PROBE_1);
+                // Divisor de tensao com 3.3V
+                // R = (Vout / Vin) * R referencia
+                r.value = ((float)raw / 4095.0f) * 3300.0f;
+                r.unit = "ohms";
+                r.statusColor = (r.value < 10.0f) ? 
+                    UI_COLORS::DANGER : UI_COLORS::SUCCESS;
+            }
+            break;
+
+        case MMODE_CONTINUITY:
+            // Teste de continuidade
+            {
+                int raw = analogRead(PIN_PROBE_1);
+                r.value = (float)raw;
+                r.unit = "ADC";
+                // Menor que 100 = curto (buzzer)
+                // Maior que 4000 = aberto
+                r.statusColor = (r.value < 100.0f) ? 
+                    UI_COLORS::SUCCESS : UI_COLORS::WARNING;
+            }
+            break;
+
         default:
-            r.value = 0;
+            r.value = 0.0f;
             r.unit = "-";
             r.statusColor = UI_COLORS::UNKNOWN;
             r.valid = false;
@@ -155,19 +201,16 @@ MultimeterReading multimeter_read() {
 }
 
 // ============================================================================
-// CALIBRAÇÃO
+// CALIBRACAO
 // ============================================================================
 void multimeter_calibrate_zmpt(float realVoltage) {
-    // Corrige o fator de escala baseado na tensão real medida
-    // com um multímetro de referência
+    // Corrige o fator de escala baseado na tensao real medida
+    // com um multimetro de referencia
     // realVoltage tipicamente = 220V ou 110V
     float currentReading = multimeter_read_ac_voltage();
-    if (currentReading > 1) {
-        deviceSettings.zmptScaleFactor = realVoltage / currentReading *
-                                           ZMPT_SCALE_FACTOR;
-        saveSettings();
-        DBG_PRINTF("[MULTI] ZMPT calibrado: %.2f\n",
-                   deviceSettings.zmptScaleFactor);
+    if (currentReading > 1.0f) {
+        float newFactor = realVoltage / currentReading * ZMPT_SCALE_FACTOR;
+        DBG_PRINTF("[MULTI] ZMPT calibrado: fator = %.2f\n", newFactor);
     }
 }
 
@@ -176,7 +219,7 @@ void multimeter_calibrate_zmpt(float realVoltage) {
 // ============================================================================
 void multimeter_set_mode(MultimeterMode mode) {
     currentMode = mode;
-    DBG_PRINTF("[MULTI] Modo: %d\n", mode);
+    DBG_PRINTF("[MULTI] Modo: %d\n", (int)mode);
 }
 
 MultimeterMode multimeter_get_mode() {
@@ -184,7 +227,7 @@ MultimeterMode multimeter_get_mode() {
 }
 
 // ============================================================================
-// UI
+// UI - Desenhar tela do multimetro
 // ============================================================================
 void multimeter_draw(const MultimeterReading* reading) {
     tft.fillScreen(UI_COLORS::BACKGROUND);
@@ -193,11 +236,9 @@ void multimeter_draw(const MultimeterReading* reading) {
     if (!reading) return;
 
     // Card grande no centro
-    int cx = 160, cy = 110;
-    tft.fillRoundRect(cx - 130, cy - 70, 260, 140, 12,
-                       UI_COLORS::CARD_BG);
-    tft.drawRoundRect(cx - 130, cy - 70, 260, 140, 12,
-                      reading->statusColor);
+    int16_t cx = 160, cy = 110;
+    tft.fillRoundRect(cx - 130, cy - 70, 260, 140, 12, UI_COLORS::CARD_BG);
+    tft.drawRoundRect(cx - 130, cy - 70, 260, 140, 12, reading->statusColor);
 
     // Modo
     const char* modeStr;
@@ -206,21 +247,22 @@ void multimeter_draw(const MultimeterReading* reading) {
         case MMODE_AC_VOLTAGE:  modeStr = "AC VOLTAGE"; break;
         case MMODE_DC_CURRENT: modeStr = "DC CURRENT"; break;
         case MMODE_AC_CURRENT: modeStr = "AC CURRENT"; break;
+        case MMODE_RESISTANCE: modeStr = "RESISTANCE"; break;
+        case MMODE_CONTINUITY: modeStr = "CONTINUITY"; break;
         default: modeStr = "MULTIMETER"; break;
     }
 
     tft.setTextColor(UI_COLORS::TEXT_DIM);
     tft.setTextSize(2);
-    tft.setTextDatum(TC_DATUM);
-    tft.setCursor(cx, cy - 55);
+    tft.setCursor(cx - 60, cy - 55);
     tft.print(modeStr);
 
     // Valor
     char valStr[32];
     if (reading->valid) {
-        if (reading->value >= 100) {
+        if (reading->value >= 100.0f) {
             snprintf(valStr, sizeof(valStr), "%.1f", reading->value);
-        } else if (reading->value >= 1) {
+        } else if (reading->value >= 1.0f) {
             snprintf(valStr, sizeof(valStr), "%.2f", reading->value);
         } else {
             snprintf(valStr, sizeof(valStr), "%.3f", reading->value);
@@ -231,49 +273,39 @@ void multimeter_draw(const MultimeterReading* reading) {
 
     tft.setTextColor(UI_COLORS::TEXT);
     tft.setTextSize(5);
-    tft.setCursor(cx, cy - 20);
+    tft.setCursor(cx - 50, cy - 20);
     tft.print(valStr);
     tft.setTextSize(2);
     tft.setCursor(cx + 10, cy + 20);
     tft.print(reading->unit);
 
-    tft.setTextDatum(TL_DATUM);
-    draw_footer();
+    draw_footer_modern();
 }
 
+// ============================================================================
+// Handle da UI (loop principal)
+// ============================================================================
 void multimeter_handle() {
     lastActivityMs = millis();
 
-    // Atualiza LED RGB
+    // Atualiza LED RGB - indicador de atividade
     static int phase = 0;
     static unsigned long lastToggle = 0;
     unsigned long now = millis();
     if (now - lastToggle > 500) {
         phase = !phase;
-        led_set_rgb(0, phase ? 20 : 5, 0);
+        // Alterna verde (atividade)
+        if (phase) {
+            tft.setPixel(10, 230, UI_COLORS::SUCCESS);
+        } else {
+            tft.setPixel(10, 230, UI_COLORS::BACKGROUND);
+        }
         lastToggle = now;
     }
 
     // Leitura
     currentReading = multimeter_read();
     multimeter_draw(&currentReading);
-
-    // Navegação por botões
-    if (btn_just_pressed(BTN_LEFT)) {
-        int m = (int)currentMode;
-        if (m > 0) {
-            currentMode = (MultimeterMode)(m - 1);
-            led_flash_rgb(0, 30, 0, 100, 0);
-        }
-    } else if (btn_just_pressed(BTN_RIGHT)) {
-        int m = (int)currentMode;
-        if (m < MMODE_CONTINUITY) {
-            currentMode = (MultimeterMode)(m + 1);
-            led_flash_rgb(0, 30, 0, 100, 0);
-        }
-    } else if (btn_just_pressed(BTN_BACK)) {
-        currentAppState = STATE_MENU;
-    }
 
     delay(100);
 }

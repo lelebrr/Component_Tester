@@ -1,18 +1,11 @@
 // ============================================================================
-// Component Tester PRO v3.0 — LEDs (Implementação)
+// Component Tester PRO v3.0 — LEDs (simples, GPIO)
 // ============================================================================
 
 #include "leds.h"
 #include "globals.h"
 #include "config.h"
-#include <NeoPixelBus.h>
 
-// ============================================================================
-// NEOPIXEL (RGB LED WS2812B)
-// ============================================================================
-static NeoPixelBus<NeoGrbFeature, Neo800KbpsMethod> strip(RGB_LED_COUNT, PIN_RGB_LED);
-
-// Estados
 static unsigned long rgbFlashOnMs = 0;
 static unsigned long rgbFlashOffMs = 0;
 static unsigned long rgbFlashStart = 0;
@@ -20,27 +13,14 @@ static bool rgbFlashing = false;
 static bool rgbLastState = false;
 static uint8_t rgbTargetR = 0, rgbTargetG = 0, rgbTargetB = 0;
 
-// ============================================================================
-// INICIALIZAÇÃO
-// ============================================================================
 void leds_init() {
     pinMode(PIN_LED_GREEN, OUTPUT);
     pinMode(PIN_LED_RED, OUTPUT);
     digitalWrite(PIN_LED_GREEN, LOW);
     digitalWrite(PIN_LED_RED, LOW);
-    DBG_PRINTLN("[LED] LEDs indicadores inicializados");
+    LOG_SERIAL_F("LEDs OK");
 }
 
-void rgb_init() {
-    strip.Begin();
-    strip.Show();
-    led_off();
-    DBG_PRINTLN("[RGB] WS2812B inicializado");
-}
-
-// ============================================================================
-// LEDs INDICADORES
-// ============================================================================
 void set_green_led(bool on) {
     digitalWrite(PIN_LED_GREEN, on ? HIGH : LOW);
 }
@@ -55,12 +35,8 @@ void set_both_leds(bool on) {
 }
 
 void update_leds() {
-    // Placeholder para lógicas de flashing
 }
 
-// ============================================================================
-// PADRÕES DE FLAPPING
-// ============================================================================
 void flash_ok() {
     static unsigned long lastToggle = 0;
     static bool state = false;
@@ -105,16 +81,14 @@ void flash_alert() {
     }
 }
 
-// ============================================================================
-// RGB LED (WS2812B)
-// ============================================================================
 void led_set_rgb(uint8_t r, uint8_t g, uint8_t b) {
     rgbTargetR = r;
     rgbTargetG = g;
     rgbTargetB = b;
     rgbFlashing = false;
-    strip.SetPixelColor(0, RgbColor(r, g, b));
-    strip.Show();
+    if (r > 128) set_red_led(true);
+    else if (g > 128) set_green_led(true);
+    else set_both_leds(false);
 }
 
 void led_set_rgb_hex(uint32_t color) {
@@ -134,14 +108,12 @@ void led_flash_rgb(uint8_t r, uint8_t g, uint8_t b,
     rgbFlashStart = millis();
     rgbFlashing = true;
     rgbLastState = true;
-    strip.SetPixelColor(0, RgbColor(r, g, b));
-    strip.Show();
+    led_set_rgb(r, g, b);
 }
 
 void led_off() {
     rgbFlashing = false;
-    strip.SetPixelColor(0, RgbColor(0, 0, 0));
-    strip.Show();
+    set_both_leds(false);
 }
 
 void led_set_color(uint8_t colorIndex) {
