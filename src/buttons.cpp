@@ -10,6 +10,13 @@
 #include "display_globals.h"
 
 #include <string.h>
+#include <XPT2046_Touchscreen.h>
+#include <SPI.h>
+
+// Instancia o controlador de touch nos pinos dedicados da CYD
+SPIClass touchSPI(HSPI);
+XPT2046_Touchscreen touch(PIN_TOUCH_CS); 
+
 
 // ============================================================================
 // VARIAVEIS
@@ -45,20 +52,48 @@ void buttons_init() {
     gLastTouch.y = 0;
     gLastTouch.z = 0;
 
+    LOG_SERIAL_F("[BTN] Inicializando sistema de botões e touch...");
+    LOG_SERIAL_FMT("[BTN] Configuração touch - MinX:%d, MaxX:%d, MinY:%d, MaxY:%d\n",
+                 TOUCH_MIN_X, TOUCH_MAX_X, TOUCH_MIN_Y, TOUCH_MAX_Y);
+
     // Tenta inicializar touch screen
     bool touchOk = false;
     #ifdef __EXCEPTIONS
     try {
     #endif
-        // Inicializa o display primeiro
-        if (tftInitialized) {
-            uint16_t touchData[4] = { TOUCH_MIN_X, TOUCH_MAX_X, TOUCH_MIN_Y, TOUCH_MAX_Y };
-            tft.setTouch(touchData);
-            touchOk = true; // Assume sucesso se display estiver inicializado
+        // Verifica se o display está inicializado primeiro
+        if (!tftInitialized) {
+            LOG_SERIAL_F("[BTN] ERRO: Display não inicializado, aguardando...");
+            return;
         }
+        
+        LOG_SERIAL_F("[BTN] Display inicializado, configurando touch controller...");
+        
+        // Inicializa o barramento SPI dedicado para o touch na CYD
+        touchSPI.begin(PIN_HSPI_SCLK, PIN_HSPI_MISO, PIN_HSPI_MOSI, PIN_TOUCH_CS);
+        
+        // Inicializa o controlador XPT2046
+        if (touch.begin(touchSPI)) {
+            touch.setRotation(1); // Rotação 1 ou 3 dependendo do espelhamento, CYD costuma ser 1
+            touchOk = true;
+            LOG_SERIAL_F("[BTN] Touch controller XPT2046 inicializado com sucesso");
+        } else {
+            LOG_SERIAL_F("[BTN] ERRO: Falha ao iniciar controlador XPT2046");
+            touchOk = false;
+        }
+        
+        // Teste rápido do touch
+        if (touchOk && touch.touched()) {
+            TS_Point p = touch.getPoint();
+            LOG_SERIAL_FMT("[BTN] Touch testado com sucesso - X=%d, Y=%d, Z=%d\n", p.x, p.y, p.z);
+        } else if (touchOk) {
+            LOG_SERIAL_F("[BTN] Touch configurado (Aguardando toque)");
+        }
+
     #ifdef __EXCEPTIONS
     } catch (...) {
         DBG("[BTN] Touch screen não disponível");
+        LOG_SERIAL_F("[BTN] EXCEÇÃO: Falha ao configurar touch controller");
     }
     #endif
 
@@ -68,7 +103,7 @@ void buttons_init() {
     }
 
     gButtonsInitialized = true;
-    LOG_SERIAL_F("[BTN] Sistema de botoes inicializado (touch: OK)");
+    LOG_SERIAL_FMT("[BTN] Sistema de botoes inicializado (touch: %s)\n", touchOk ? "OK" : "FALHOU");
 }
 
 // ============================================================================
@@ -82,21 +117,47 @@ void buttons_update() {
 
     unsigned long now = millis();
 
-    // Processa touch
-    uint16_t tx, ty;
-    if (tft.getTouch(&tx, &ty)) {
+    // Limpa flags "just" do frame anterior
+    for (int i = 0; i < BTN_TOTAL; i++) {
+        gButtons[i].justPressed = false;
+        gButtons[i].justReleased = false;
+    }
+
+    // Processa touch usando o controlador XPT2046
+    if (touch.touched()) {
+        TS_Point p = touch.getPoint();
+        uint16_t tx = p.x;
+        uint16_t ty = p.y;
+        
+        // Log de touch detectado (a cada 500ms para evitar spam)
+        static unsigned long lastTouchLog = 0;
+        if (now - lastTouchLog > 500) {
+            LOG_SERIAL_FMT("[BTN] Touch detectado - Raw: X=%d, Y=%d, Z=%d\n", tx, ty, p.z);
+            lastTouchLog = now;
+        }
+        
         if (!gTouchPressed) {
             gTouchPressed = true;
             gTouchPressStart = now;
             gLastTouch.x = tx;
             gLastTouch.y = ty;
-            gLastTouch.z = 1;
+            gLastTouch.z = p.z;
+            
+            // Mapeamento manual de coordenadas para ROTAÇÃO 3 (Flipped Landscape)
+            int16_t mappedX = map(tx, TOUCH_MIN_X, TOUCH_MAX_X, SCREEN_W, 0);
+            int16_t mappedY = map(ty, TOUCH_MIN_Y, TOUCH_MAX_Y, SCREEN_H, 0);
+            
+            LOG_SERIAL_FMT("[BTN] Touch pressionado - Mapeado: X=%d, Y=%d\n", mappedX, mappedY);
+            
+            // Define justPressed APENAS no momento inicial do toque
+            gButtons[BTN_TOUCH].justPressed = true;
         }
-        gButtons[BTN_TOUCH].justPressed = true;
     } else {
+
         if (gTouchPressed) {
             gTouchPressed = false;
             gButtons[BTN_TOUCH].justReleased = true;
+            LOG_SERIAL_F("[BTN] Touch liberado");
         }
     }
 
@@ -110,11 +171,6 @@ void buttons_update() {
     update_physical_button(BTN_BACK, PIN_BTN_BACK);
 #endif
 
-    // Limpa flags "just" apos processar
-    for (int i = 0; i < BTN_TOTAL; i++) {
-        gButtons[i].justPressed = false;
-        gButtons[i].justReleased = false;
-    }
 }
 
 // Atualiza botao fisico
@@ -156,36 +212,32 @@ bool touch_is_pressed() {
 
 TouchPoint touch_get_point() {
     TouchPoint p;
-    uint16_t tx, ty;
-
-    if (tft.getTouch(&tx, &ty)) {
-        // Mapeia coordenadas para a tela
-        p.x = map(tx, TOUCH_MIN_X, TOUCH_MAX_X, 0, SCREEN_W);
-        p.y = map(ty, TOUCH_MIN_Y, TOUCH_MAX_Y, 0, SCREEN_H);
-        p.z = 1;
+    if (touch.touched()) {
+        TS_Point tp = touch.getPoint();
+        // Mapeia coordenadas para a tela (ROTAÇÃO 3)
+        p.x = map(tp.x, TOUCH_MIN_X, TOUCH_MAX_X, SCREEN_W, 0);
+        p.y = map(tp.y, TOUCH_MIN_Y, TOUCH_MAX_Y, SCREEN_H, 0);
+        p.z = tp.z;
     } else {
         p.x = 0;
         p.y = 0;
         p.z = 0;
     }
-
     return p;
 }
 
 TouchPoint touch_get_raw_point() {
     TouchPoint p;
-    uint16_t tx, ty;
-
-    if (tft.getTouch(&tx, &ty)) {
-        p.x = tx;
-        p.y = ty;
-        p.z = 1;
+    if (touch.touched()) {
+        TS_Point tp = touch.getPoint();
+        p.x = tp.x;
+        p.y = tp.y;
+        p.z = tp.z;
     } else {
         p.x = 0;
         p.y = 0;
         p.z = 0;
     }
-
     return p;
 }
 

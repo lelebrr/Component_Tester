@@ -57,7 +57,7 @@
 
 // Controle do Touch
 #define PIN_TOUCH_CS          33      // Chip Select (GPIO33) - ATIVO BAIXO
-#define PIN_TOUCH_IRQ         GPIO_NUM_NC  // IRQ (nao conectado)
+#define PIN_TOUCH_IRQ         36      // IRQ (GPIO36 / SENSOR_VP)
 
 // Configuracoes do barramento
 #define TOUCH_HSPI_HOST       HSPI_HOST
@@ -66,11 +66,11 @@
 #define TOUCH_PIN_NUM_CLK    PIN_HSPI_SCLK
 #define TOUCH_PIN_NUM_CS     PIN_TOUCH_CS
 
-// Configuracoes do touch
-#define TOUCH_MIN_X           300     // Valor ADCmin X
-#define TOUCH_MAX_X           3800    // Valor ADCmax X
-#define TOUCH_MIN_Y           200     // Valor ADCmin Y
-#define TOUCH_MAX_Y           3700    // Valor ADCmax Y
+// Configuracoes do touch (Calibradas para CYD)
+#define TOUCH_MIN_X           300     // Valor ADCmin X (Ajustado via log)
+#define TOUCH_MAX_X           3700    // Valor ADCmax X (Ajustado via log)
+#define TOUCH_MIN_Y           600     // Valor ADCmin Y (Ajustado via log)
+#define TOUCH_MAX_Y           3600    // Valor ADCmax Y (Ajustado via log)
 #define TOUCH_MIN_PRESSURE    100     // Pressao minima valida
 #define TOUCH_MAX_PRESSURE    1000     // Pressao maxima
 

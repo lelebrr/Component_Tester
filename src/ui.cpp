@@ -12,6 +12,7 @@
 #include "database.h"
 #include "display_globals.h"
 #include "display_mutex.h"
+#include "buttons.h"
 
 
 // ============================================================================
@@ -32,10 +33,11 @@ static uint8_t historyIndex = 0;
 // ============================================================================
 
 void ui_init(void) {
-    graphics_init();
+    // Não inicializa display aqui, pois já é feito no main.cpp
+    // Evita inicialização dupla e conflitos
     ui_menu_init();
     
-    DBG("UI inicializada");
+    DBG("UI inicializada (display já inicializado em main.cpp)");
 }
 
 // ============================================================================
@@ -190,10 +192,10 @@ void ui_menu_show(void) {
     ui_draw_header(mainMenu.title);
 
     uint16_t y = CONTENT_Y + 10;
-    uint8_t displayCount = min(mainMenu.itemCount, (uint8_t)6);
+    uint8_t displayCount = min(mainMenu.itemCount, (uint8_t)5);
 
     for(uint8_t i = 0; i < displayCount; i++) {
-        uint8_t idx = (mainMenu.selectedIndex / 6) * 6 + i;
+        uint8_t idx = (mainMenu.selectedIndex / 5) * 5 + i;
 
         if(idx >= mainMenu.itemCount) break;
 
@@ -208,17 +210,54 @@ void ui_menu_show(void) {
 
 }
 
-void ui_menu_update(void) {
-    if(currentScreen != SCREEN_MENU) return;
+void ui_update(void) {
+    if (btn_just_pressed(BTN_TOUCH)) {
+        TouchPoint p = touch_get_point();
+        uint16_t x = p.x;
+        uint16_t y = p.y;
 
-    ui_menu_show();
+        switch(currentScreen) {
+            case SCREEN_MENU:
+                ui_menu_handle_touch(x, y);
+                break;
+
+            case SCREEN_MEASURE:
+            case SCREEN_MULTIMETER:
+            case SCREEN_HISTORY:
+            case SCREEN_ABOUT:
+            case SCREEN_CALIBRATION:
+                // Se tocar no rodapé (qualquer parte), volta para o menu
+                if(y > SCREEN_H - 60) {
+                    if(buzzer_enabled()) buzzer_beep(BUZZER_FREQ_BTN, 30);
+                    LOG_SERIAL_F("[UI] Voltando ao Menu Principal\n");
+                    ui_menu_show();
+                }
+                break;
+
+            case SCREEN_SETTINGS:
+                ui_settings_handle_touch(x, y);
+                break;
+
+            case SCREEN_SPLASH:
+                if(buzzer_enabled()) buzzer_beep(BUZZER_FREQ_BTN, 30);
+                ui_menu_show();
+                break;
+
+            case SCREEN_ERROR:
+                if(y > SCREEN_H - 60) ui_menu_show();
+                break;
+            
+            default:
+                break;
+        }
+    }
 }
 
 bool ui_menu_handle_touch(uint16_t x, uint16_t y) {
-    if(y > CONTENT_Y && y < CONTENT_Y + mainMenu.itemCount * 30) {
+    if(y > CONTENT_Y && y < CONTENT_Y + 5 * 30) {
         uint8_t touchedIndex = (y - CONTENT_Y) / 30;
 
-        uint8_t idx = (mainMenu.selectedIndex / 6) * 6 + touchedIndex;
+        uint8_t idx = (mainMenu.selectedIndex / 5) * 5 + touchedIndex;
 
         if(idx < mainMenu.itemCount) {
             mainMenu.selectedIndex = idx;
@@ -232,13 +271,40 @@ bool ui_menu_handle_touch(uint16_t x, uint16_t y) {
         }
     }
 
-    if(y > SCREEN_H - FOOTER_H) {
-        bool okPressed = (x > 20 && x < 80);
-        bool backPressed = (x > SCREEN_W - 80 && x < SCREEN_W - 20);
+    // Deteccao no Rodape (Generosa: 60px do fundo)
+    if(y > SCREEN_H - 60) {
+        bool okPressed = (x < SCREEN_W / 3);
+        bool backPressed = (x > (2 * SCREEN_W) / 3);
 
         if(okPressed) {
             if(buzzer_enabled()) {
                 buzzer_beep(BUZZER_FREQ_OK, 50);
+            }
+            
+            // Acao de OK no menu - Transicao de tela
+            uint8_t selectedId = mainMenu.items[mainMenu.selectedIndex].id;
+            const char* itemName = mainMenu.items[mainMenu.selectedIndex].name;
+            LOG_SERIAL_FMT("[UI] OK selecionado: %s (ID: %d)\n", itemName ? itemName : "NULL", selectedId);
+            
+            switch(selectedId) {
+                case 0: // Componentes
+                    ui_measure_show(COMP_UNKNOWN);
+                    break;
+                case 1: // Multimetro
+                    ui_multimeter_show();
+                    break;
+                case 2: // Historico
+                    ui_history_show();
+                    break;
+                case 3: // Calibracao
+                    ui_calibration_show();
+                    break;
+                case 4: // Configuracoes
+                    ui_settings_show();
+                    break;
+                case 5: // Sobre
+                    ui_about_show();
+                    break;
             }
             return true;
         }
@@ -247,6 +313,9 @@ bool ui_menu_handle_touch(uint16_t x, uint16_t y) {
             if(buzzer_enabled()) {
                 buzzer_beep(BUZZER_FREQ_WARNING, 30);
             }
+            LOG_SERIAL_F("[UI] VOLTAR para Splash\n");
+            ui_show_splash_basic();
+            return true;
         }
     }
 
@@ -509,29 +578,86 @@ void ui_calibration_show_result(bool success) {
 
 void ui_settings_show(void) {
     LOCK_TFT();
-
     currentScreen = SCREEN_SETTINGS;
-
     tft.fillScreen(C_BACKGROUND);
-
     ui_draw_header("Configuracoes");
 
     tft.setTextColor(C_TEXT);
-    tft.setTextDatum(MC_DATUM);
+    tft.setTextDatum(ML_DATUM);
     tft.setFreeFont(FONT_NORMAL);
-    tft.drawString("Backlight", 80, CONTENT_Y + 40);
-    tft.drawString("Som", 80, CONTENT_Y + 80);
-    tft.drawString("Seguranca", 80, CONTENT_Y + 120);
-    tft.drawString("Auto-Sleep", 80, CONTENT_Y + 160);
 
-    ui_draw_footer("SALVAR", "VOLTAR");
+    uint16_t xText = 20;
+    uint16_t xValue = SCREEN_W - 80;
+
+    // Item 0: Backlight
+    tft.drawString("Backlight", xText, CONTENT_Y + 30);
+    tft.fillRect(xValue, CONTENT_Y + 20, 60, 20, C_SURFACE);
+    tft.setTextColor(C_PRIMARY);
+    tft.drawNumber(deviceSettings.backlight, xValue + 5, CONTENT_Y + 30);
+
+    // Item 1: Som
+    tft.setTextColor(C_TEXT);
+    tft.drawString("Som", xText, CONTENT_Y + 70);
+    tft.setTextColor(deviceSettings.soundEnabled ? C_SUCCESS : C_ERROR);
+    tft.drawString(deviceSettings.soundEnabled ? "ON" : "OFF", xValue, CONTENT_Y + 70);
+
+    // Item 2: Modo Silencioso
+    tft.setTextColor(C_TEXT);
+    tft.drawString("Silencioso", xText, CONTENT_Y + 110);
+    tft.setTextColor(deviceSettings.silentMode ? C_SUCCESS : C_ERROR);
+    tft.drawString(deviceSettings.silentMode ? "SIM" : "NAO", xValue, CONTENT_Y + 110);
+
+    // Item 3: Auto-Sleep
+    tft.setTextColor(C_TEXT);
+    tft.drawString("Auto-Sleep", xText, CONTENT_Y + 150);
+    tft.setTextColor(deviceSettings.autoSleep ? C_SUCCESS : C_ERROR);
+    tft.drawString(deviceSettings.autoSleep ? "ON" : "OFF", xValue, CONTENT_Y + 150);
+
+    ui_draw_footer("VOLTAR", "SALVAR");
     UNLOCK_TFT();
-
 }
 
-void ui_settings_toggle_item(uint8_t index) {
-}
+void ui_settings_handle_touch(uint16_t x, uint16_t y) {
+    if (y > SCREEN_H - 60) {
+        // Lado esquerdo: VOLTAR
+        if (x < SCREEN_W / 3) {
+            if(buzzer_enabled()) buzzer_beep(BUZZER_FREQ_BTN, 30);
+            ui_menu_show();
+        }
+        // Lado direito: SALVAR
+        else if (x > (2 * SCREEN_W) / 3) {
+            if(buzzer_enabled()) buzzer_beep(BUZZER_FREQ_OK, 50);
+            LOG_SERIAL_F("[UI] Configuracoes salvas\n");
+            ui_menu_show();
+        }
+        return;
+    }
 
+    // Processa itens da lista
+    if (y > CONTENT_Y && y < SCREEN_H - 60) {
+        uint8_t item = (y - CONTENT_Y) / 40;
+        
+        if(buzzer_enabled()) buzzer_beep(BUZZER_FREQ_BTN, 30);
+        
+        switch(item) {
+            case 0: // Backlight
+                deviceSettings.backlight += 64; 
+                if(deviceSettings.backlight > 255) deviceSettings.backlight = 64;
+                analogWrite(TFT_BL, deviceSettings.backlight);
+                break;
+            case 1: // Som
+                deviceSettings.soundEnabled = !deviceSettings.soundEnabled;
+                break;
+            case 2: // Silencioso
+                deviceSettings.silentMode = !deviceSettings.silentMode;
+                break;
+            case 3: // Auto-Sleep
+                deviceSettings.autoSleep = !deviceSettings.autoSleep;
+                break;
+        }
+        ui_settings_show(); // Redesenha
+    }
+}
 void ui_settings_draw_slider(uint8_t index, uint8_t value) {
     uint16_t y = CONTENT_Y + 30 + index * 40;
     uint16_t sliderW = (SCREEN_W - 100 - 40) * value / 100;
@@ -635,7 +761,11 @@ bool ui_error_wait_confirm(void) {
     uint16_t x, y;
 
     while(true) {
-        if(tft.getTouch(&x, &y)) {
+        if(btn_just_pressed(BTN_TOUCH)) {
+            TouchPoint p = touch_get_point();
+            uint16_t x = p.x;
+            uint16_t y = p.y;
+            
             if(y > SCREEN_H - 60 && y < SCREEN_H - 30) {
                 if(x > SCREEN_W/2 - 40 && x < SCREEN_W/2 + 40) {
                     return true;
@@ -745,7 +875,10 @@ bool ui_touch_wait(uint16_t* x, uint16_t* y, uint32_t timeoutMs) {
     uint32_t start = millis();
 
     while(millis() - start < timeoutMs) {
-        if(tft.getTouch(x, y)) {
+        if(btn_just_pressed(BTN_TOUCH)) {
+            TouchPoint tp = touch_get_point();
+            *x = tp.x;
+            *y = tp.y;
             if(ui_touch_is_valid(*x, *y)) {
                 return true;
             }

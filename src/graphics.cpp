@@ -37,60 +37,139 @@ uint16_t rgb565(uint8_t r, uint8_t g, uint8_t b) {
 // INICIALIZACAO
 // ============================================================================
 void graphics_init() {
+    LOG_SERIAL_F("[GFX] Iniciando inicializacao do display...");
+    
     if (g_tft_mutex == NULL) {
         g_tft_mutex = xSemaphoreCreateRecursiveMutex();
+        LOG_SERIAL_F("[GFX] Mutex criado");
     }
 
     LOCK_TFT();
-    tft.init();
-    tft.setRotation(1); // Landscape (Horizontal) - 320x240
+    LOG_SERIAL_F("[GFX] Iniciando tft.init()...");
+    
+    // Verifica pinagem atual
+    LOG_SERIAL_FMT("[GFX] Pinagem - CS:%d, DC:%d, RST:%d, MOSI:%d, SCLK:%d, MISO:%d, BL:%d\n",
+                 TFT_CS, TFT_DC, TFT_RST, TFT_MOSI, TFT_SCLK, TFT_MISO, TFT_BL);
+    
+    // Tenta inicializar o display com tratamento de erros
+    bool initSuccess = false;
+    #ifdef __EXCEPTIONS
+    try {
+    #endif
+        tft.init();
+        initSuccess = true;
+        LOG_SERIAL_F("[GFX] Display inicializado com sucesso");
+    #ifdef __EXCEPTIONS
+    } catch (...) {
+        LOG_SERIAL_F("[GFX] ERRO: Exceção durante inicialização do display");
+        initSuccess = false;
+    }
+    #endif
+    
+    if (!initSuccess) {
+        UNLOCK_TFT();
+        LOG_SERIAL_F("[GFX] FALHA: Não foi possível inicializar o display");
+        tftInitialized = false;
+        return;
+    }
+    
+    LOG_SERIAL_F("[GFX] Definindo rotacao para 3 (paisagem invertida)...");
+    tft.setRotation(3); // Landscape (Inverted) - Tenta corrigir espelhamento
+    
+    LOG_SERIAL_F("[GFX] Corrigindo inversao de cores...");
+    tft.invertDisplay(true); // CYD geralmente precisa de inversão para cores corretas
+    
+    LOG_SERIAL_F("[GFX] Preenchendo tela com cor de fundo...");
     tft.fillScreen(C_BACKGROUND);
     UNLOCK_TFT();
     
     // Configura PWM do Backlight
+    LOG_SERIAL_FMT("[GFX] Configurando backlight (GPIO%d)...\n", PIN_TFT_BL);
     pinMode(PIN_TFT_BL, OUTPUT);
     digitalWrite(PIN_TFT_BL, HIGH);
+    LOG_SERIAL_F("[GFX] Backlight configurado");
     
     tftInitialized = true;
+    LOG_SERIAL_F("[GFX] Inicializacao do display concluida com sucesso");
+}
+
+// ============================================================================
+// OTIMIZAÇÃO DE DESEMPENHO E ANTI-FLICKERING
+// ============================================================================
+
+// Buffer de double buffering para evitar flickering
+static uint16_t* tft_buffer = NULL;
+static bool buffer_initialized = false;
+
+void graphics_optimize_display() {
+    if (!tftInitialized || buffer_initialized) {
+        return;
+    }
+    
+    LOG_SERIAL_F("[GFX] Inicializando otimizações de display...");
+    
+    // O Double Buffering de 150KB foi desativado para evitar erro de alocação de memória (OOM)
+    // tft_buffer = (uint16_t*)malloc(SCREEN_W * SCREEN_H * sizeof(uint16_t));
+    
+    /* 
+    if (tft_buffer == NULL) {
+        LOG_SERIAL_F("[GFX] ERRO: Não foi possível alocar buffer de display");
+        return;
+    }
+    
+    // Inicializa buffer com cor de fundo
+    memset(tft_buffer, C_BACKGROUND & 0xFF, SCREEN_W * SCREEN_H * sizeof(uint16_t));
+    
+    buffer_initialized = true;
+    LOG_SERIAL_F("[GFX] Buffer de display otimizado criado");
+    */
+    LOG_SERIAL_F("[GFX] Otimização por buffer desativada (economizando 150KB RAM)");
+}
+
+void graphics_flush_buffer() {
+    if (!tftInitialized || !buffer_initialized) {
+        return;
+    }
+    
+    LOCK_TFT();
+    // Copia buffer para display
+    tft.pushRect(0, 0, SCREEN_W, SCREEN_H, tft_buffer);
+    UNLOCK_TFT();
+}
+
+void graphics_clear_buffer() {
+    if (!buffer_initialized) {
+        return;
+    }
+    
+    memset(tft_buffer, C_BACKGROUND & 0xFF, SCREEN_W * SCREEN_H * sizeof(uint16_t));
+}
+
+// Função segura para desenhar no buffer
+void graphics_buffer_draw_text(int16_t x, int16_t y, const char* text, uint16_t color) {
+    if (!buffer_initialized) {
+        return;
+    }
+    
+    // Simula desenho no buffer (simplificado)
+    // Em uma implementação real, isso desenharia diretamente no buffer
+    // Por enquanto, apenas limpa a área para evitar erros de compilação
+    if (x >= 0 && x < SCREEN_W && y >= 0 && y < SCREEN_H) {
+        size_t len = strlen(text);
+        if (x + len * 6 < SCREEN_W) { // Assumindo largura de fonte 6
+             memset(&tft_buffer[y * SCREEN_W + x], color & 0xFF, len * 6 * sizeof(uint16_t));
+        }
+    }
 }
 
 bool graphics_init_safe() {
-    if (g_tft_mutex == NULL) {
-        g_tft_mutex = xSemaphoreCreateRecursiveMutex();
+    // Função simplificada - chama graphics_init() que já tem tratamento de erros
+    if (tftInitialized) {
+        return true; // Já inicializado
     }
-
-    #ifdef __EXCEPTIONS
-    try {
-    #endif
-        LOCK_TFT();
-        graphics_init(); // Verifica se a inicialização foi bem sucedida
-        bool initOk = tftInitialized;
-        if (initOk) {
-            tft.setRotation(1); // Landscape (Horizontal) - 320x240
-            tft.fillScreen(C_BACKGROUND);
-            UNLOCK_TFT();
-            
-            // Configura PWM do Backlight
-            pinMode(PIN_TFT_BL, OUTPUT);
-            digitalWrite(PIN_TFT_BL, HIGH);
-            
-            tftInitialized = true;
-            return true;
-        }
-        UNLOCK_TFT();
-        return false;
-    #ifdef __EXCEPTIONS
-    } catch (...) {
-        // Em caso de exceção, libera o mutex
-        if (g_tft_mutex) {
-            xSemaphoreGiveRecursive(g_tft_mutex);
-        }
-    }
-    #endif
     
-    // Fallback: inicialização mínima sem display
-    tftInitialized = false;
-    return false;
+    graphics_init();
+    return tftInitialized;
 }
 
 // ============================================================================

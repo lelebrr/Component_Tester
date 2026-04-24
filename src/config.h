@@ -28,7 +28,7 @@
 #define SCREEN_W                 320     // Largura em pixels
 #define SCREEN_H                 240     // Altura em pixels
 #define STATUS_BAR_H            28      // Altura da barra de status
-#define FOOTER_H                20      // Altura do rodape
+#define FOOTER_H                40      // Altura do rodape (aumentado para melhor toque)
 #define CONTENT_Y               STATUS_BAR_H
 #define CONTENT_H               (SCREEN_H - STATUS_BAR_H - FOOTER_H)
 
@@ -228,6 +228,9 @@
 
 // Macro de log serial (usado em init de modulos)
 #define LOG_SERIAL_F(x)     Serial.println(F(x))
+
+// Macro de log serial com formatação (para depuração)
+#define LOG_SERIAL_FMT(format, ...) Serial.printf(format, __VA_ARGS__)
 
 #if DEBUG_ENABLED
   #define DBG(x)          Serial.println(x)

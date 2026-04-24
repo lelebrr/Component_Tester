@@ -64,5 +64,10 @@ uint16_t rgb565(uint8_t r, uint8_t g, uint8_t b);
 // INICIALIZACAO
 // ============================================================================
 void graphics_init(void);
+void graphics_optimize_display(void);
+void graphics_flush_buffer(void);
+void graphics_clear_buffer(void);
+void graphics_buffer_draw_text(int16_t x, int16_t y, const char* text, uint16_t color);
+
 
 #endif // GRAPHICS_H

@@ -1,0 +1,62 @@
+Processing cyd (platform: espressif32; board: esp32dev; framework: arduino)
+--------------------------------------------------------------------------------
+Library Manager: Installing bodmer/TFT_eSPI @ ^2.5.43
+Unpacking 0% 10% 20% 30% 40% 50% 60% 70% 80% 90% 100%
+Library Manager: TFT_eSPI@2.5.43 has been installed!
+Library Manager: Installing paulstoffregen/OneWire @ ^2.3.8
+Unpacking 0% 10% 20% 30% 40% 50% 60% 70% 80% 90% 100%
+Library Manager: OneWire@2.3.8 has been installed!
+Library Manager: Installing milesburton/DallasTemperature @ ^3.9.2
+Unpacking 0% 10% 20% 30% 40% 50% 60% 70% 80% 90% 100%
+Library Manager: DallasTemperature@3.11.0 has been installed!
+Library Manager: Resolving dependencies...
+Library Manager: Installing adafruit/Adafruit INA219 @ ^1.2.0
+Unpacking 0% 10% 20% 30% 40% 50% 60% 70% 80% 90% 100%
+Library Manager: Adafruit INA219@1.2.3 has been installed!
+Library Manager: Resolving dependencies...
+Library Manager: Installing Adafruit NeoPixel
+Unpacking 0% 10% 20% 30% 40% 50% 60% 70% 80% 90% 100%
+Library Manager: Adafruit NeoPixel@1.15.4 has been installed!
+Library Manager: Installing Adafruit GFX Library
+Unpacking 0% 10% 20% 30% 40% 50% 60% 70% 80% 90% 100%
+Library Manager: Adafruit GFX Library@1.12.6 has been installed!
+Library Manager: Resolving dependencies...
+Library Manager: Installing Adafruit BusIO
+Unpacking 0% 10% 20% 30% 40% 50% 60% 70% 80% 90% 100%
+Library Manager: Adafruit BusIO@1.17.4 has been installed!
+Library Manager: Installing Adafruit SSD1306
+Unpacking 0% 10% 20% 30% 40% 50% 60% 70% 80% 90% 100%
+Library Manager: Adafruit SSD1306@2.5.16 has been installed!
+Library Manager: Resolving dependencies...
+Verbose mode can be enabled via `-v, --verbose` option
+CONFIGURATION: https://docs.platformio.org/page/boards/espressif32/esp32dev.html
+PLATFORM: Espressif 32 (55.3.36) > Espressif ESP32 Dev Module
+HARDWARE: ESP32 240MHz, 320KB RAM, 4MB Flash
+DEBUG: Current (cmsis-dap) External (cmsis-dap, esp-bridge, esp-prog, iot-bus-jtag, jlink, minimodule, olimex-arm-usb-ocd, olimex-arm-usb-ocd-h, olimex-arm-usb-tiny-h, olimex-jtag-tiny, tumpa)
+PACKAGES: 
+ - contrib-piohome @ 3.4.4 
+ - framework-arduinoespressif32 @ 3.3.6 
+ - framework-arduinoespressif32-libs @ 5.5.0+sha.f56bea3d1f 
+ - tool-esptoolpy @ 5.1.0 
+ - tool-openocd-esp32 @ 2.1200.20251215 (12.0) 
+ - tool-xtensa-esp-elf-gdb @ 16.3.0+20250913 
+ - toolchain-xtensa-esp-elf @ 14.2.0+20251107
+*** Applied include path shortening for 296 framework paths ***
+*** Path length reduced from 33947 to ~11838 characters ***
+*** Estimated savings: 21608 characters ***
+LDF: Library Dependency Finder -> https://bit.ly/configure-pio-ldf
+LDF Modes: Finder ~ chain, Compatibility ~ soft
+Found 54 compatible libraries
+Scanning dependencies...
+Dependency Graph
+|-- TFT_eSPI @ 2.5.43
+|-- OneWire @ 2.3.8
+|-- DallasTemperature @ 3.11.0
+|-- Adafruit INA219 @ 1.2.3
+|-- Preferences @ 3.3.6
+|-- SPI @ 3.3.6
+|-- Wire @ 3.3.6
+|-- FS @ 3.3.6
+|-- SD @ 3.3.6
+|-- Adafruit GFX Library @ 1.12.6
+Building in release mode

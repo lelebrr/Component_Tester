@@ -71,6 +71,8 @@ extern MenuData mainMenu;
 
 void ui_draw_splash(void);
 void ui_show_splash_animated(void);
+void ui_show_splash_basic(void);
+void ui_show_error_screen(const char* message);
 void ui_splash_set_progress(uint8_t percent, const char* message);
 
 // ============================================================================
@@ -79,7 +81,9 @@ void ui_splash_set_progress(uint8_t percent, const char* message);
 
 void ui_menu_init(void);
 void ui_menu_show(void);
-void ui_menu_update(void);
+void ui_menu_init(void);
+void ui_menu_show(void);
+void ui_update(void);
 bool ui_menu_handle_touch(uint16_t x, uint16_t y);
 void ui_menu_navigate(int8_t direction);
 
@@ -121,6 +125,7 @@ void ui_calibration_show_result(bool success);
 // ============================================================================
 
 void ui_settings_show(void);
+void ui_settings_handle_touch(uint16_t x, uint16_t y);
 void ui_settings_toggle_item(uint8_t index);
 void ui_settings_draw_slider(uint8_t index, uint8_t value);
 
