@@ -1,131 +1,243 @@
-# Component Tester PRO v3.0 — CYD Edition
+# Sondvolt — Component Tester Pro
 
 <p align="center">
-<img src="assets/hero.png" alt="Component Tester PRO v3.0" width="700">
+  <img src="assets/hero.png" alt="Sondvolt Component Tester" width="600">
 </p>
 
 <p align="center">
-<a href="https://ESP32-2432S028R"><img src="https://img.shields.io/badge/Placa-ESP32--2432S028R-yellow?style=for-the-badge&logo=espressif" alt="Placa"></a>
-<a href="https://arduino.cc"><img src="https://img.shields.io/badge/Framework-Arduino Framework-00979D?style=for-the-badge&logo=arduino" alt="Framework"></a>
-<a href="https://platformio.org/"><img src="https://img.shields.io/badge/PlatformIO-L民主-FA7343?style=for-the-badge&logo=platformio" alt="PlatformIO"></a>
-<a href="LICENSE"><img src="https://img.shields.io/badge/Licen├ºa-MIT-green?style=for-the-badge" alt="Licen├ºa"></a>
-<a href="https://github.com/lelebrr/Component_Tester/releases"><img src="https://img.shields.io/badge/Vers├úo-3.0.0-blue?style=for-the-badge" alt="Vers├úo"></a>
+  <b>Teste. Meça. Confirme.</b><br>
+  <i>Sistema profissional de teste de componentes eletrônicos e multímetro AC/DC True RMS</i>
 </p>
 
 ---
 
-## O que ├⌐ Este Projeto?
+## O Que é o Sondvolt?
 
-O **Component Tester PRO v3.0 ├⌐ uma ferramenta de diagn├│stico eletr├┬nico profissional**, constru├ªda sobre a placa **ESP32-2432S028R (Cheap Yellow Display)**. O dispositivo combina teste de componentes, mult├şmetro AC/DC True RMS e medi├º├úo de temperatura em uma ├║nica interface touchscreen.
-
-> **Destaque:** Sa├¡mos do ATmega328P para o poder do ESP32 Dual Core 240MHz, oferecendo processamento paralelo para medi├º├úo True RMS, busca instant├ónea em banco de dados e interface gr├ífica fluida.
+O **Sondvolt** é um testador de componentes eletrônicos profissional e multímetro AC/DC True RMS, desenvolvido para makers, técnicos e entusiastas da eletrônica. Construído sobre a plataforma ESP32-2432S028R (Cheap Yellow Display), oferece uma solução completa e de baixo custo para identificação e teste de componentes.
 
 ---
 
-## Recursos Principais
+## Características Principais
 
-| Recurso | Descri├º├úo |
-|:---|:---|
-| **Modo Auto-Detect** | Identifica automaticamente transistores, MOSFETs, diodos, capacitores, resistores e indutores |
-| **Banco de Dados** | Arquivo COMPBD.CSV no MicroSD com milhares de componentes identificados |
-| **Mult├şmetro AC** | Tens├úo de rede (110V/220V) via sensor ZMPT101B com precis├úo True RMS |
-| **Mult├şmetro DC** | Tens├úo, corrente e pot├¬ncia via sensor INA219 (I2C) |
-| **Sonda T├®rmica** | Temperatura via DS18B20 com alertas visuais |
-| **Interface Touch** | Display TFT 2.8" com navega├º├úo t├útil sem bot├Áes f├¡sicos |
-| **Datalogger** | Salva medi├º├Áes no cart├úo SD com timestamp |
+| Categoria | Recursos |
+|:----------|:---------|
+| **Teste de Componentes** | Resistor, capacitor, diodo, LED, transistor, MOSFET, indutor, cristal, fusível, varistor, potenciômetro, optoacoplador |
+| **Multímetro** | Tensão DC (0-26V), Tensão AC True RMS (110V/220V), Corrente DC (até 3.2A), Resistência, Capacitância |
+| **Segurança** | Bloqueio automático 220V, alertas sonoros e visuais, confirmação obrigatória para medições de alta tensão |
+| **Armazenamento** | Banco de dados em MicroSD (COMPBD.CSV), histórico de medições com data/hora |
+| **Interface** | Display TFT 320×240 touchscreen, design profissional com ícones vetoriais, animação de splash screen |
 
 ---
 
-## Especifica├º├Áes T├®cnicas
+## Especificações Técnicas
 
-| Especifica├º├úo | Valor |
-|:---|:---|
+| Parâmetro | Valor |
+|:----------|:------|
 | **Microcontrolador** | ESP32-WROOM-32 Dual Core @ 240MHz |
-| **Mem├│ria RAM** | 520KB |
-| **Mem├│ria Flash** | 4MB |
-| **Display** | TFT 2.8" ILI9341 320x240 |
-| **Touchscreen** | XPT2046 Resistivo |
-| **Slot MicroSD** | Integrado (at├® 32GB FAT32) |
-| **Tens├úo AC M├íxima** | 250V RMS |
-| **Tens├úo DC M├íxima** | 26V |
-| **Corrente DC M├íxima** | ┬▒3.2A |
-| **Faixa de Resistencia** | 0.1O a 10MO |
-| **Faixa de Capacit├óncia** | 1pF a 10000uF |
-| **Faixa de Indut├óncia** | 0.1mH a 1000mH |
+| **Display** | TFT 2.8" (320×240) ILI9341 com Touch Resistivo XPT2046 |
+| **Memória** | 520KB SRAM / 4MB Flash SPI |
+| **Tensão DC Máx** | 26V |
+| **Tensão AC Máx** | 250V RMS |
+| **Corrente DC Máx** | ±3.2A (INA219) |
+| **Resistência** | 0.1Ω — 10MΩ |
+| **Capacitância** | 1pF — 100μF |
+| **Precisão** | ±2% (após calibração) |
+| **Sensor AC** | ZMPT101B (Transformador de Tensão Isolado) |
+| **Sensor DC** | INA219 (I2C Bi-Direcional) |
 
 ---
 
-## Sensores Externos Suportados
+## Hardware
 
-| Sensor | Fun├º├úo | Interface |
-|:---|:---|:---|
-| **ZMPT101B** | Tens├úo AC (True RMS) | GPIO 34 (ADC) |
-| **INA219** | Tens├úo/Corrente DC | I2C (GPIO 27/22) |
-| **DS18B20** | Temperatura | OneWire (GPIO 4) |
+### Placa Base
+- **ESP32-2432S028R** (Cheap Yellow Display)
+- Display ILI9341 320×240 pixels
+- Touchscreen XPT2046
+
+### Sensores
+- **ZMPT101B**: Transformador de tensão AC para medição 110V/220V
+- **INA219**: Sensor de corrente DC via I2C
+- ADC ESP32 para medições de resistência/capacitância
+
+### Periféricos
+- LEDs indicadores (verde/vermelho)
+- Buzzer piezoelétrico
+- Slot para cartão MicroSD
 
 ---
 
-## Avisos de Seguran├ºa
+## Pinagem
 
-> **PERIGO:** Este projeto envolve medi├º├Áes em tens├úo de rede el├®trica (110V/220V). Sempre desconecte a energia antes de manipular as conex├Áes dos probes.
-
-> **ATENÇÃO:** Use luvas isolantes ao trabalhar com tens├Áes superiores a 50V. A seguran├ºa pessoal ├® responsabilidade do operador.
+| Função | Pino ESP32 | Descrição |
+|:-------|:-----------|:----------|
+| TFT MOSI | 13 | VSPI dados |
+| TFT SCLK | 14 | VSPI clock |
+| TFT CS | 15 | Chip select |
+| TFT DC | 2 | Data/Command |
+| TFT BL | 21 | Backlight |
+| Touch CS | 33 | Touchscreen |
+| SD CS | 5 | Cartão SD |
+| ADC Resistor | 35 | Sonda 1 |
+| ADC Capacitor | 34 | Sonda 2 |
+| ZMPT AC | 36 | Sensor AC |
+| LED Verde | 16 | Indicador OK |
+| LED Vermelho | 17 | Alerta |
+| Buzzer | 26 | Som |
 
 ---
 
-## Instala├º├úo R├ípida
+## Instalação
 
-### 1. Preparar o SD Card
-
-1. Formate o cart├úo em **FAT32** (n├úo exFAT!)
-2. Copie `sd_files/COMPBD.CSV` para a raiz do cart├úo
-
-### 2. Compilar e Enviar
+### Pré-requisitos
 
 ```bash
-# Usando PlatformIO
-pio run -e cyd
-pio run -e cyd --target upload
+# PlatformIO
+pip install platformio
 ```
 
-### 3. Conectar Sensores
+### Biblioteca TFT_eSPI
 
-Siga o diagrama de pinagem em `docs/PINOUT.md` antes de energizar.
+```bash
+cd ~/Arduino/libraries
+git clone https://github.com/Bodmer/TFT_eSPI.git
+```
 
----
+### Configuração User_Setup.h
 
-## Documenta├º├úo Completa
+- HSPI/Touch: CLK=25, MOSI=32, MISO=39, CS=33
+- VSPI/TFT: CLK=14, MOSI=13, CS=15, DC=2
+- SD Card: HSPI CLK=18, MOSI=23, MISO=19, CS=5
+- Backlight: GPIO 21 (PWM)
 
-Para informasi detalhadas, consulte:
+### Upload
 
-| Guia | Descri├º├úo |
-|:---|:---|
-| [docs/MANUAL.md](docs/MANUAL.md) | Manual do usu├ário completo |
-| [docs/HARDWARE.md](docs/HARDWARE.md) | Esquemas e lista de materiais |
-| [docs/PINOUT.md](docs/PINOUT.md) | Refer├¬ncia de pinagem |
-| [docs/COMPONENTS.md](docs/COMPONENTS.md) | Componentes suportados |
-| [docs/CONFIG.md](docs/CONFIG.md) | calibra├º├úo e configura├º├úo |
-| [docs/FAQ.md](docs/FAQ.md) | Perguntas frequentes |
-
----
-
-## Solu├º├úo de Problemas
-
-| Problema | Solu├º├úo |
-|:---|:---|
-| SD Card n├úo detectado | Verifique formata├º├úo FAT32 e presence do COMPBD.CSV |
-| Touchscreen n├úo responde | Use os bot├Áes f├¡sicos como fallback |
-| Leitura AC incorreta | Recalibre o sensor ZMPT101B nos Ajustes |
-| INA219 n├úo responde | Verifique conex├Áes I2C (SDA/SCL) |
+```bash
+cd Sondvolt
+pio run --upload
+```
 
 ---
 
-## Licen├ºa
+## Uso
 
-MIT License - Livre para uso, modifica├º├úo e distribui├º├úo.
+### Menu Principal
+
+1. **Componentes**: Testar componentes passivos e ativos
+2. **Multímetro**: Medir tensão AC/DC, corrente, resistência
+3. **Histórico**: Ver medições anteriores
+4. **Calibração**: Calibrar pontas de prova
+5. **Configurações**: Ajustes do sistema
+6. **Sobre**: Informações do projeto
+
+### Modo Componentes
+
+Conecte o componente entre as pontas de prova e o sistema identificará automaticamente o tipo, exibindo valor, tolerância e condições de uso.
+
+### Modo Multímetro
+
+| Função | Faixa |
+|:-------|:------|
+| **VCC** | Tensão DC (0-26V) |
+| **VAC** | Tensão AC True RMS (0-250V) |
+| **A** | Corrente DC (±3.2A) |
+| **Ω** | Resistência (0.1Ω - 10MΩ) |
+
+### Segurança Elétrica
+
+O sistema alertará e bloqueará medições se detectar:
+- Tensões AC acima de 50V (alerta amarelo)
+- Tensões AC acima de 180V (bloqueio vermelho)
+
+> ⚠️ **CONFIRMAÇÃO OBRIGATÓRIA** para medir 220V AC — requer fusível e varistor instalados.
+
+---
+
+## Estrutura do Projeto
+
+```
+src/
+├── pins.h           # Pinagem completa
+├── config.h         # Configurações gerais
+├── graphics.h/cpp   # Ícones e UI
+├── multimeter.h/cpp # Multímetro AC/DC
+├── safety.h/cpp     # Segurança elétrica
+├── ui.h/cpp         # Telas e menus
+├── globals.h        # Variáveis globais
+├── database.h/cpp   # Banco de dados CSV
+├── splash.cpp       # Splash screen
+├── buzzer.h/cpp     # Som
+├── main.cpp         # Programa principal
+```
+
+---
+
+## Banco de Dados (COMPBD.CSV)
+
+```csv
+Código,Nome,Valor,Mín,Máx,Tolerância
+R100,Resistor 100Ω,100,95,105,5%
+R1K,Resistor 1KΩ,1000,950,1050,5%
+R10K,Resistor 10KΩ,10000,9500,10500,5%
+C100n,Capacitor 100nF,100,90,110,10%
+```
+
+---
+
+## Histórico de Medições (HISTORY.CSV)
+
+```csv
+Timestamp;Data;Hora;Componente;Valor;Unidade;Status
+1714051200;24/04/2025;14:00:00;Resistor 1K;987;ohm;OK
+```
+
+---
+
+## Calibração
+
+1. Acesse o modo **Calibração** no menu
+2. Curto-circuite as pontas de prova (junte as pontas)
+3. Aguarde o processo de calibração automática finalizar
+4. O sistema salvara automaticamente os valores de offset
+
+---
+
+## Limitações
+
+- ❌ Não mede componentes em circuito (PCB)
+- ❌ Não mede corrente AC diretamente
+- ⚠️ Requer proteção externa para medições em 220V
+
+---
+
+## Documentação
+
+| Guia | Descrição |
+|:-----|:----------|
+| [Manual do Usuário](docs/MANUAL.md) | Instruções completas de operação |
+| [Guia de Hardware](docs/HARDWARE.md) | Esquemas e diagramas de ligação |
+| [Pinagem](docs/PINOUT.md) | Referência completa de GPIOs |
+| [Componentes](docs/COMPONENTS.md) | Lista de componentes suportados |
+| [Menus](docs/MENUS.md) | Estrutura de interface |
+| [Configuração](docs/CONFIG.md) | Ajustes de firmware |
+| [Desenvolvimento](docs/DEVELOP.md) | Arquitetura do código |
+
+---
+
+## Agradecimentos
+
+- **Bodmer** — Biblioteca TFT_eSPI
+- ** Comunidade ESP32** — Suporte e documentação
+- ** Makers DIY** — Projetos inspiradores
+
+---
+
+## Licença
+
+MIT License — Livre para uso, modificação e distribuição.
 
 ---
 
 <p align="center">
-<b>Feito com ❤️ por Leandro</b> | Component Tester PRO Team
+<b>SONDVOLT</b> — Teste. Meça. Confirme.<br>
+<i>Professional Electronics Testing</i>
 </p>

@@ -1,5 +1,5 @@
 // ============================================================================
-// Component Tester PRO v3.1 — Menu Navigation System
+// Sondvolt v3.1 — Menu Navigation System
 // Complete implementation with modern UI and button navigation
 // ============================================================================
 
@@ -86,7 +86,7 @@ void menu_init() {
 void menu_draw() {
     clear_screen();
     
-    draw_status_bar("Component Tester", "PRO v3.1");
+    draw_status_bar("Sondvolt", "v3.1");
     
     int8_t page = currentCardIndex / CARDS_PER_PAGE;
     int8_t startIdx = page * CARDS_PER_PAGE;

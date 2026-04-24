@@ -1,62 +1,144 @@
-# ❓ Perguntas Frequentes (FAQ) — Component Tester PRO
+# Perguntas Frequentes — Component Tester PRO v3.0
 
-Aqui você encontra as respostas para as dúvidas mais comuns sobre montagem, operação e manutenção do seu Component Tester PRO v3.0.
+Aqui você encontra as respostas para as dúvidas mais comuns sobre montagem, operação e manutenção do Component Tester PRO v3.0.
 
 ---
 
-## 🛠️ Hardware e Montagem
+## Hardware e Montagem
 
 ### 1. O que é necessário para começar?
-Você precisa da placa **ESP32 CYD**, um cartão MicroSD e os sensores opcionais (ZMPT101B para AC, INA219 para DC e DS18B20 para temperatura). Veja a lista completa no [Guia de Hardware](HARDWARE.md).
+
+Você precisa dos seguintes componentes:
+
+| Item | Necessário | Notas |
+|:---|:---:|:---|
+| ESP32-2432S028R (CYD) | ✅ Obrigatório | Placa base |
+| Cartão MicroSD (8GB+) | ✅ Recomendado | FAT32, COMPBD.CSV |
+| ZMPT101B | ❌ Opcional | Multímetro AC |
+| INA219 | ❌ Opcional | Multímetro DC |
+| DS18B20 | ❌ Opcional | Sonda de temperatura |
+| Cabos e jumpers | ❌ Opcional | Conexões |
+
+Consulte o [Guia de Hardware](HARDWARE.md) para detalhes.
 
 ### 2. A tela não responde ao toque. O que fazer?
-- **Tipo de Tela:** Lembre-se que a tela é **resistiva**. Use a unha ou uma stylus (caneta de toque).
-- **Calibração:** Se o toque estiver desalinhado, acesse `Settings > Calibrate` no menu do dispositivo.
-- **Hardware:** Verifique se o cabo flat marrom do touchscreen (atrás do LCD) está bem encaixado.
 
-### 3. O cartão SD não é reconhecido.
-- **Formatação:** Deve ser obrigatoriamente **FAT32**.
-- **Arquivo:** O arquivo `COMPBD.CSV` deve estar na **raiz** do cartão, não dentro de pastas.
-- **Hardware:** O slot SD da CYD é sensível; tente inserir e remover o cartão com a placa desligada.
+O touchscreen da CYD é **resistivo**, não capacitivo. Isso significa:
 
----
+- **Toque:** Requer pressão física (use a unha ou stylus)
+- **Calibração:** Acesse **Ajustes → Calibrar Touch** se estiver desalinhado
+- **Hardware:** Verifique o cabo flat do touchscreen (atrás do LCD)
 
-## ⚡ Medições e Sensores
+### 3. O cartão SD não é reconhecido
 
-### 4. As leituras do Multímetro AC estão instáveis.
-- **Calibração:** Cada sensor ZMPT101B tem um potenciômetro azul. Você deve ajustá-lo enquanto mede uma tensão conhecida (ex: tomada) até que o valor no display coincida.
-- **Filtro:** O firmware usa RMS por amostragem. Certifique-se de que o sensor está bem alimentado com 5V estáveis.
+Verifique os seguintes pontos:
 
-### 5. O Probe Principal não detecta nada.
-- **Resistor de Referência:** Verifique se você instalou o resistor de **10kΩ** entre o pino de medição (GPIO 35) e o pino de teste.
-- **Conexão:** Certifique-se de que o componente está fazendo bom contato com as garras.
+| Problema | Solução |
+|:---|:---|
+| Formatação errada | Deve ser **FAT32**, não exFAT |
+| Arquivo faltando | `COMPBD.CSV` deve estar na raiz |
+| Slot solto | Insira com a placa desligada |
+| Cartão corrompido | Reformatar e recarregar arquivo |
 
-### 6. Como funciona a identificação automática?
-O sistema mede os parâmetros básicos (Vf, Hfe, Capacitância, etc.) e cruza esses dados com o `COMPBD.CSV`. Se os valores forem próximos aos de um componente conhecido, o nome dele (ex: 2N2222) aparecerá no topo da tela.
+### 4. Quais pinos posso usar para expansão?
 
----
+Os pinos livres para expansão são:
 
-## ⚙️ Software e Customização
-
-### 7. Como atualizo o banco de dados de componentes?
-O banco de dados é um arquivo de texto simples (`CSV`). Você pode abrir o `sd_files/COMPBD.CSV` no seu computador, adicionar novas linhas seguindo o padrão e salvar de volta no cartão SD.
-
-### 8. Posso usar este projeto em um ESP32 comum?
-**Sim**, mas você terá que fazer todas as ligações do display ILI9341 e do touch manualmente. O código é otimizado para a pinagem da CYD, então você precisará alterar as definições no arquivo `src/config.h`.
+- **GPIO 4:** OneWire (DS18B20)
+- **GPIO 22:** I2C SCL
+- **GPIO 27:** I2C SDA
+- **GPIO 34:** Entrada ADC (ZMPT101B)
+- **GPIO 35:** Entrada ADC (Probe)
 
 ---
 
-## 🚑 Solução de Problemas (Troubleshooting)
+## Medições e Sensores
 
-| Sintoma | Causa Provável | Solução |
+### 5. As leituras AC estão instáveis
+
+O sensor ZMPT101B requer calibração:
+
+1. Ajuste o potenciômetro azul no módulo para uma tensão conhecida
+2. Ajuste o `ZMPT Scale` no menu **Ajustes**
+3. Use a fórmula: `EscalaNova = leituraMultímetro / leituraCYD`
+
+### 6. O Probe não detecta componentes
+
+Verifique:
+
+1. **Conexão:** Componente entre Probe (+) e GND
+2. **Resistor 10kΩ:** Instalado no divisor de tensão?
+3. **Componente:** Teste com um resistor conhecido (10kΩ)
+
+### 7. Como funciona a identificação automática?
+
+O sistema:
+1. Mede os parâmetros básicos (Vf, hFE, capacitância)
+2. Cruza os dados com `COMPBD.CSV`
+3. Exibe o Part Number se houver correspondência
+
+### 8. Posso usar em outro display ESP32?
+
+Sim, mas será necessário:
+1.リwirPinagem manual do display ILI9341
+2. Alterar definições em `src/config.h`
+3. O código foi otimizado para a CYD
+
+---
+
+## Banco de Dados e Software
+
+### 9. Como atualizar o banco de dados?
+
+1. Remova o cartão SD
+2. Copie `COMPBD.CSV` para o computador
+3. Abra em Excel ou editor de texto
+4. Adicione seguindo o formato:
+
+```
+Tipo,hFE_Min,hFE_Max,Vf_Min,Vf_Max,PartNumber
+NPN,100,200,0.6,0.7,BC547
+```
+
+5. Salve em CSV (UTF-8) e copie de volta
+
+### 10. Como adicionar novos modos de medição?
+
+1. Adicione o modo em `menu.cpp`
+2. Implemente a função em `measurements.cpp`
+3. Adicione ao handler em `measurements_handle()`
+
+---
+
+## Segurança
+
+### 11. Posso medir diretamente a rede elétrica?
+
+> **🔴 PERIGO:** Não conecte fios nu diretamente ao ESP32.
+> Use sempre o módulo **ZMPT101B** que possui isolação galvânica.
+
+### 12. Quais são os limites de medição?
+
+| Sistema | Limite Máximo |
+|:---|:---:|
+| AC (ZMPT) | 250V RMS |
+| DC (INA219) | 26V / 3.2A |
+| Probe (GPIO) | 3.3V máximo |
+
+---
+
+## Troubleshooting Rápido
+
+| Sintoma | Causa | Solução |
 |:---|:---|:---|
-| **Tela Branca** | Erro de driver ou pinagem | Verifique o `platformio.ini` (User_Setup.h). |
-| **LED Vermelho piscando** | Cartão SD faltando ou corrompido | Insira um cartão com o arquivo `COMPBD.CSV`. |
-| **Bipes constantes** | Alerta de temperatura alta | Afaste a sonda DS18B20 de fontes de calor. |
-| **Reset cíclico** | Alimentação insuficiente | Use um cabo USB de boa qualidade e porta 2.0/3.0. |
+| Tela branca | Driver não carregou | Verifique PlatformIO |
+| LED vermelho piscando | SD não detectado | Insira cartão com COMPBD.CSV |
+| Toque invertido | Não calibrado | Acesse Ajustes |
+| Reset cíclico | Alimentação fraca | Use fonte 5V/2A |
+| Bipes constantes | Temperatura alta | Afaste DS18B20 |
 
 ---
 
 <p align="center">
-  <i>Ainda tem dúvidas? Abra uma <b>Issue</b> no GitHub ou consulte o <b>Manual do Usuário</b>.</i>
+<i>Ainda tem dúvidas? Consulte o <b>Manual do Usuário</b> ou abra uma <b>Issue</b> no GitHub.</i>
 </p>

@@ -1,145 +1,236 @@
 // ============================================================================
-// Component Tester PRO v3.0 — Configuração de Hardware (CYD Edition)
-// OTIMIZADO PARA ESP32 COM DUAL CORE
+// Sondvolt v3.x — Configuracoes do Projeto
+// Hardware: ESP32-2432S028R (Cheap Yellow Display)
 // ============================================================================
+// Arquivo: config.h
+// Descricao: Configuracoes gerais, constantes e parametros do projeto
+// ============================================================================
+
 #ifndef CONFIG_H
 #define CONFIG_H
 
 #include <Arduino.h>
+#include "pins.h"
 
 // ============================================================================
 // VERSAO DO FIRMWARE
 // ============================================================================
-#define FW_VERSION        "3.0.0"
-#define FW_CODENAME        "CYD Edition"
-#define FW_BOARD           "ESP32-2432S028R"
-#define FW_BUILD           __DATE__ " " __TIME__
+#define FW_VERSION                "3.1.0"
+#define FW_CODENAME              "Sondvolt"
+#define FW_BOARD                 BOARD_NAME
+#define FW_BUILD                __DATE__ " " __TIME__
+#define FW_AUTHOR               "Eletrônica DIY"
+#define FW_YEAR                 "2025-2026"
 
 // ============================================================================
-// PINOS DO DISPLAY TFT (VSPI - fixo na CYD)
+// TAMANHO E RESOLUCAO DE TELA
 // ============================================================================
-#define PIN_TFT_CS         15      // TFT Chip Select
-#define PIN_TFT_DC         2       // TFT Data/Command
-#define PIN_TFT_RST        -1      // TFT Reset (não implementado)
-#define PIN_TFT_MOSI       13      // VSPI MOSI
-#define PIN_TFT_SCLK       14      // VSPI Clock
-#define PIN_TFT_MISO       12      // VSPI MISO
-#define PIN_TFT_BL         21      // TFT Backlight
+#define SCREEN_W                 320     // Largura em pixels
+#define SCREEN_H                 240     // Altura em pixels
+#define STATUS_BAR_H            28      // Altura da barra de status
+#define FOOTER_H                20      // Altura do rodape
+#define CONTENT_Y               STATUS_BAR_H
+#define CONTENT_H               (SCREEN_H - STATUS_BAR_H - FOOTER_H)
 
 // ============================================================================
-// PINOS DO TOUCH (TOUCH_VSPI)
+// CORES DA UI (RGB565)
 // ============================================================================
-#define PIN_TOUCH_CS       33      // Touch Chip Select
-#define PIN_TOUCH_SCLK     25      // Touch Clock
-#define PIN_TOUCH_MOSI     32      // Touch MOSI
-#define PIN_TOUCH_MISO     39      // Touch MISO
-#define PIN_TOUCH_IRQ      -1      // Touch IRQ (não utilizado)
+// Cores principais do tema visual
+#define C_PRIMARY               0x07E0  // Verde principal
+#define C_PRIMARY_DARK         0x0584  // Verde escuro
+#define C_PRIMARY_LIGHT        0xB7BE  // Verde claro
+#define C_SECONDARY            0xFD20  // Laranja
+#define C_ACCENT              0x001F  // Azul
+#define C_BACKGROUND          0x0000  // Preto
+#define C_SURFACE             0x1082  // Superficie escura
+#define C_SURFACE_LIGHT       0x3186  // Superficie clara
+#define C_TEXT                0xFFFF  // Branco
+#define C_TEXT_SECONDARY      0xC618  // Cinza claro
+#define C_ERROR               0xF800  // Vermelho
+#define C_WARNING             0xFFC0  // Amarelo
+#define C_SUCCESS             0x07E0  // Verde
+
+// Cores dos componentes (identificacao)
+#define C_RESISTOR             0xD6BA  // Marrom
+#define C_CAPACITOR           0x0078  // Azul
+#define C_DIODE               0xF062  // Roxo
+#define C_LED                 0x07E0  // Verde
+#define C_TRANSISTOR          0xC80A  // Roxo escuro
+#define C_INDUCTOR            0xB2B2  // Couro
+#define C_CRYSTAL             0xCE59  // Quartzo
+#define C_UNKNOWN             0x7BEF  // Cinza
 
 // ============================================================================
-// PINOS DO SD CARD (HSPI - dedicado)
+// CONSTANTES DE TEMPO (millisegundos)
 // ============================================================================
-#define PIN_SD_CS         5       // SD Card Chip Select
-#define PIN_SD_MOSI       23      // HSPI MOSI
-#define PIN_SD_SCLK       18      // HSPI Clock
-#define PIN_SD_MISO       19      // HSPI MISO
+#define TIME_SPLASH            2000    // Tempo splash screen (ms)
+#define TIME_DEBOUNCE           50      // Debounce botoes (ms)
+#define TIME_REFRESH_DISP       100     // Refresh display (ms)
+#define TIME_REFRESH_MEAS      200     // Refresh medicoes (ms)
+#define TIME_BACKLIGHT_OFF     45000   // Backlight desligar (ms)
+#define TIME_SAVE_HISTORY      5000    // Salvar historico (ms)
+#define TIME_CALIBRATION       1000    // Duracao calibra~ao (ms)
+#define TIME_SAFETY_ALERT     3000    // Alerta seguranca (ms)
+#define TIME_CONFIRM_TIMEOUT  10000   // Timeout confirm (ms)
 
 // ============================================================================
-// PINOS DE MEDICAO (ADC)
+// LIMITES DE SEGURANCA ELETRICA
 // ============================================================================
-#define PIN_PROBE_1        35      // Probe 1 (ADC1_CH7)
-#define PIN_PROBE_2        22      // Probe 2 (GPIO22, não ADC!)
-#define PIN_ZMPT_AC        34      // Sensor Tensão AC (ADC1_CH6)
-#define PIN_PROBE_1_CH     ADC1_CHANNEL_7
-#define PIN_ZMPT_AC_CH     ADC1_CHANNEL_6
+#define SAFETY_MAX_VOLTAGE_DC   50.0f   // Tensao DC maxima segura (V)
+#define SAFETY_MAX_VOLTAGE_AC   25.0f   // Tensao AC maxima segura (V)
+#define SAFETY_MAX_CURRENT      1.0f    // Corrente maxima segura (A)
+#define SAFETY_ALERT_VOLTAGE  30.0f    // Alerta tensao (V)
+#define SAFETY_WARNING_VOLTAGE 50.0f // Aviso tensao (V)
 
 // ============================================================================
-// PINOS DE PERIFERICOS
+// LIMITES DE MEDICAO
 // ============================================================================
-#define PIN_BUZZER         26      // Buzzer PWM
-#define PIN_LED_GREEN      16      // LED Verde
-#define PIN_LED_RED        17      // LED Vermelho
-#define PIN_ONEWIRE       4       // DS18B20 OneWire
-
-// ============================================================================
-// PINOS I2C (expansão futura)
-// ============================================================================
-#define PIN_I2C_SDA        32      // I2C SDA (compartilhado com Touch!)
-#define PIN_I2C_SCL        33      // I2C SCL (compartilhado com Touch!)
-#define I2C_FREQ          100000  // I2C Frequency
+#define MEAS_MIN_RESISTANCE   0.1f    // Res min (ohms)
+#define MEAS_MAX_RESISTANCE  10000000.0f // Res max (ohms)
+#define MEAS_MIN_CAPACITANCE 1.0f     // Cap min (pF)
+#define MEAS_MAX_CAPACITANCE  100000.0f // Cap max (uF)
+#define MEAS_MIN_INDUCTANCE   0.1f     // Ind min (uH)
+#define MEAS_MAX_INDUCTANCE   10000.0f // Ind max (mH)
+#define MEAS_MIN_VOLTAGE      0.0f     // Tensao min (V)
+#define MEAS_MAX_VOLTAGE      250.0f   // Tensao max (V)
+#define MEAS_MIN_CURRENT     0.0f     // Corrente min (A)
+#define MEAS_MAX_CURRENT      5.0f     // Corrente max (A)
 
 // ============================================================================
 // CONSTANTES ADC
 // ============================================================================
-#define ADC_MAX_VALUE     4095
-#define ADC_REF_VOLTAGE  3.3f
-#define ADC_SCALE        (ADC_REF_VOLTAGE / 4096.0f)
+#define ADC_MAX_VALUE         4095    // Valor maximo ADC 12-bit
+#define ADC_REF_VOLTAGE       3.3f    // Tensao referencia (V)
+#define ADC_VREF             1.1f    // Tensao referencia interna (V)
+#define ADC_RESOLUTION         12       // Bits de resolucao
 
 // ============================================================================
-// CONSTANTES ZMPT (Sensor de Tensão AC)
+// CONSTANTES ZMPT101B (Sensor Tensao AC)
 // ============================================================================
-#define ZMPT_ZERO_POINT  2048        // Offset do centro
-#define ZMPT_SCALE     311.0f      // Fator de conversão (para 220V RMS)
+#define ZMPT_SAMPLE_RATE     1000    // Amostragens por segundo
+#define ZMPT_NUM_SAMPLES     50      // Amostras para media
+#define ZMPT_ZERO_POINT      2048    // Ponto zero (meio do ADC)
+#define ZMPT_SCALE_FACTOR    311.0f  // Fator para 220V RMS
+#define ZMPT_FILTER_SIZE    5       // Tamanho filtro media movel
 
 // ============================================================================
-// CONSTANTES INA219 (Sensor de Corrente)
+// CONSTANTES INA219 (Sensor Corrente)
 // ============================================================================
-#define INA219_ADDR      0x40      // Endereço I2C padrão
-#define INA219_SHUNT     0.1f      // Shunt resistor (ohms)
-#define INA219_MAX_AMPS 3.2f       // Corrente máxima teórica
+#define INA219_ADDR           0x40    // Endereco I2C padrao
+#define INA219_SHUNT          0.1f    // Shunt resistor (ohms)
+#define INA219_RSHUNT        INA219_SHUNT // Alias
+#define INA219_MAX_AMPS       3.2f    // Corrente maxima (A)
+#define INA219_VBUS_MAX      32.0f   // Tensao maxima bus (V)
+#define INA219_CALIBRATION   0x199A // Valor calibracao
 
 // ============================================================================
-// CONSTANTES DE TEMPO (us)
+// CALIBRACAO
 // ============================================================================
-#define DEBOUNCE_TIME    30000     // 30ms debounce
-#define UPDATE_DISP     100000    // 100ms refresh display
-#define UPDATE_MEAS     50000     // 50ms refresh medições
-#define CALIB_DELAY     1000000    // 1s delay calibração
-#define AUTOOFF_TIME    300000000  // 5min autooff (em micsegundos!)
+#define CALIB_DEFAULT_RES     0.0f   // Offset resistencia padrao
+#define CALIB_DEFAULT_CAP     0.0f   // Offset capacitancia padrao
+#define CALIB_DEFAULT_VOLT   0.0f   // Offset tensao padrao
+#define CALIB_DEFAULT_CURR    0.0f   // Offset corrente padrao
+#define CALIB_TOLERANCE       0.01f  // Tolerancia calibracao
 
 // ============================================================================
-// RESOLUÇÕES DE TELA
+// BANCO DE DADOS
 // ============================================================================
-#define SCREEN_W         320
-#define SCREEN_H         240
-#define STATUS_BAR_H     28
-#define FOOTER_H         20
+#define DB_MAX_COMPONENTS     200    // Maximo componentes
+#define DB_ENTRY_NAME_LEN    32      // Comprimento nome
+#define DB_ENTRY_CODE_LEN     16      // Comprimento codigo
+#define DB_FILE_CSV          "/sdcard/COMPBD.CSV"
+#define DB_FILE_TXT          "/sdcard/database.txt"
+#define DB_DELIMITER         ','     // Delimitador CSV
 
 // ============================================================================
-// CORES UI (RGB565)
+// HISTORICO
 // ============================================================================
-#define C_BLACK         0x0000
-#define C_BLUE          0x001F
-#define C_RED          0xF800
-#define C_GREEN        0x07E0
-#define C_CYAN         0x07FF
-#define C_WHITE        0xFFFF
-#define C_YELLOW       0xFFE0
-#define C_GREY         0x7BEF
-#define C_NAVY         0x000F
-#define C_ORANGE       0xFD20
-#define C_PURPLE       0x780F
-#define C_DARK         0x0005
-#define C_DARK_GREY    0x3186
-#define C_LIGHT_GREY   0xC618
+#define HISTORY_MAX_ENTRIES  100    // Maximo entradas
+#define HISTORY_FILE         "/sdcard/HISTORY.CSV"
+#define HISTORY_HEADER       "Timestamp,Data,Hora,Componente,Valor,Unidade,Status"
+#define HISTORY_DELIMITER    ';'
 
 // ============================================================================
-// MODO DE DEBUG
+// MULTIMETRO
 // ============================================================================
-#define DEBUG_MODE      0
-#if DEBUG_MODE
-  #define DBG(x)        Serial.println(x)
-  #define DBGF(x)       Serial.print(F(x))
-  #define DBG_VAL(x,y)  Serial.print(x); Serial.println(y)
+#define MULTI_DC_RANGE_200MV    0.2f    // 200mV range
+#define MULTI_DC_RANGE_2V     2.0f    // 2V range
+#define MULTI_DC_RANGE_20V   20.0f   // 20V range
+#define MULTI_DC_RANGE_200V  200.0f  // 200V range
+#define MULTI_DC_RANGE_600V  600.0f  // 600V range
+#define MULTI_AC_RANGE_200V  200.0f  // 200V range
+#define MULTI_AC_RANGE_600V  600.0f    // 600V range
+
+// ============================================================================
+// FONTES
+// ============================================================================
+#define FONT_HEADER          4       // Titulos grandes
+#define FONT_NORMAL         2       // Texto normal
+#define FONT_SMALL         1       // Texto Pequeno
+#define FONT_VALUE         6       // Valores grandes
+
+// ============================================================================
+// BUZZER (Sons)
+// ============================================================================
+#define BUZZER_FREQ_BTN         1000    // Botao (Hz)
+#define BUZZER_FREQ_OK         2000    // Confirmacao boa (Hz)
+#define BUZZER_FREQ_ERROR      500     // Erro (Hz)
+#define BUZZER_FREQ_WARNING   1500    // Alerta (Hz)
+#define BUZZER_FREQ_SUCCESS   2500    // Sucesso (Hz)
+#define BUZZER_DURATION_BTN   30      // Botao (ms)
+#define BUZZER_DURATION_OK    100     // Boa medicao (ms)
+#define BUZZER_DURATION_ERROR 200     // Erro (ms)
+#define BUZZER_DURATION_WARNING 150   // Alerta (ms)
+
+// ============================================================================
+// LOGGER
+// ============================================================================
+#define LOG_MAX_MESSAGES       50      // Mensagens buffer
+#define LOG_FILE             "/sdcard/LOG.TXT"
+#define LOG_LEVEL_DEBUG      0
+#define LOG_LEVEL_INFO       1
+#define LOG_LEVEL_WARNING    2
+#define LOG_LEVEL_ERROR    3
+
+// ============================================================================
+// MEMORIA
+// ============================================================================
+#define HEAP_MIN_FREE         10000   // Minimo heap livre (bytes)
+#define PSRAM_AVAILABLE       0       // PSRAM disponivel
+
+// ============================================================================
+// DEBUG
+// ============================================================================
+#define DEBUG_ENABLED        0       // 0=desligado, 1=ligado
+#define DEBUG_BAUD          115200   // Baud rate serial
+
+#if DEBUG_ENABLED
+  #define DBG(x)          Serial.println(x)
+  #define DBGF(x)         Serial.print(F(x))
+  #define DBG_VAL(x,y)    Serial.print(x); Serial.println(y)
+  #define DBG_FUNC(x)    Serial.println(F(#x))
 #else
   #define DBG(x)
   #define DBGF(x)
   #define DBG_VAL(x,y)
+  #define DBG_FUNC(x)
 #endif
 
 // ============================================================================
-// OTIMIZACOES DE MEMORIA
+// ARIBUTOS DE MEMORIA
 // ============================================================================
-#define PROGMEM_READONLY  PROGMEM  // Uso para dados em flash
-#define RAM_ATTR        IRAM_ATTR  // Dados acessados frequentemente
+#define PROGMEM              PROGMEM
+#define RAM_ATTR            IRAM_ATTR
+#define NOINIT_ATTR         __attribute__((section(".noinit")))
 
-#endif
+// ============================================================================
+// COMPATIBILIDADE LEGACY
+// ============================================================================
+// Aliases para codigo existente
+#define PIN_TFT_CS           PIN_TFT_CS
+#define PIN_TFT_DC           PIN_TFT_DC
+#define PIN_TFT_RST          PIN_TFT_RST
+#define PIN_TFT_BL            PIN_TFT_BL
+#define PIN_SD_CS            PIN_SD_CS
+
+#endif // CONFIG_H

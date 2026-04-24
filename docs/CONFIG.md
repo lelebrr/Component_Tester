@@ -1,64 +1,213 @@
-# Configurações - Component Tester PRO v3.0 (CYD Edition)
+# Configurações — Component Tester PRO v3.0
 
-## 1. Sistema de Persistência (NVS)
-
-Diferente do Arduino Uno, o ESP32 utiliza a **NVS (Non-Volatile Storage)** através da API `Preferences`. Os dados são salvos na Flash do microcontrolador de forma robusta e organizada por chaves.
-
-### Vantagens do NVS:
-- **Auto-save:** As configurações são salvas instantaneamente ao serem alteradas.
-- **Durabilidade:** Gerenciamento de desgaste da Flash integrado.
-- **Espaço:** Suporte a muito mais dados que a EEPROM tradicional.
+Este documento detalha todas as opções de configuração do firmware, incluindo calibração, persistência NVS e ajustes do sistema.
 
 ---
 
-## 2. Configurações Disponíveis
+## Sistema de Persistência NVS
+
+O ESP32 utiliza a **NVS (Non-Volatile Storage)** para salvar configurações na memória Flash, oferecendo vantagens sobre a EEPROM tradicional:
+
+| Recurso | Descrição |
+|:---|:---|
+| **Auto-save** | Alterações são salvas automaticamente |
+| **Durabilidade** |Gerenciamento de desgaste integrado |
+| **Capacidade** | Suporte a muito mais dados |
+
+### Chaves de Configuração
+
+| Chave | Tipo | Descrição | Padrão |
+|:---|:---:|:---|:---:|
+| `offset1` | Float | Calibração ADC (Probe) | 0.0 |
+| `offset2` | Float | Calibração ADC (Reservado) | 0.0 |
+| `silentMode` | Bool | Silenciar buzzer | false |
+| `backlight` | Int | Brilho (0-255) | 180 |
+| `zmptScale` | Float | Escala sensor AC | 1.0 |
+| `tempUnit` | Bool | Unidade: 0=°C, 1=°F | 0 |
+| `total` | ULong | Total de medições | 0 |
+| `faulty` | ULong | Componentes defeituosos | 0 |
+
+---
+
+## Configurações do Display
 
 ### Brilho do LCD
-- **Range:** 0% a 100%.
-- **Funcionamento:** Controlado via hardware por PWM (LEDC) no GPIO 21.
-- **Dica:** Brilhos menores (30-50%) economizam bateria e reduzem o calor.
+
+| Parâmetro | Valor |
+|:---|:---|
+| **Range** | 0% a 100% (0-255 PWM) |
+| **GPIO** | 21 (Backlight PWM) |
+| **Padrão** | 70% (~180) |
+
+> 💡 **Dica:** Brilho reduz energia, calor e aumenta a vida útil do display.
+
+### Orientação
+
+A rotação automática não é suportada nativamente pelo driver ILI9341. Use rotação de 0° (retrato) para melhor compatibilidade.
+
+---
+
+## Calibração de Sensores
+
+### Calibração ADC (Probe Principal)
+
+O ajuste de **offset** corrige erros de medição em aberto:
+
+1. Deixe os probes desconectados (circuito aberto)
+2. Acesse **Ajustes → Calibração → ADC Offset**
+3. Ajuste até que a leitura mostre **0.0** (ou OPEN)
+4. Confirme a seleção
+
+### Calibração ZMPT101B (Tensão AC)
+
+> **🔴 PERIGO:** Este ajuste envolve tensão de rede. Desconecte antes de manipular!
+
+O fator de escala corrige variações entre módulos ZMPT101B:
+
+1. Meça uma tensão de reference (tomada)
+2. Compare com um multímetro de referência
+3. Acesse **Ajustes → Calibração → ZMPT Scale**
+4. Ajuste até igualar a leitura do multímetro
+5. Fórmula: `NovaEscala = LeituraMultímetro / LeituraCYD`
+
+### Calibração INA219 (Corrente DC)
+
+O sensor INA219 é pré-calibrado, mas pode necessitar de ajuste:
+
+| Parâmetro | Ajuste |
+|:---|:---|
+| **Shunt** | 0.1Ω (padrão) |
+| **Calibração** | Automática na inicialização |
+
+---
+
+## Configurações de Áudio
 
 ### Modo Silencioso
-- **Opções:** ON / OFF.
-- **Funcionamento:** Quando ativado, desativa os tons do buzzer/speaker (GPIO 26).
-- **Feedback:** Alertas visuais via LEDs RGB e tela continuam ativos.
 
-### Calibração ADC (Offsets)
-- **Função:** Ajusta o zero das medições analógicas.
-- **Offsets:** `offset1` (Probe Principal) e `offset2` (Reservado).
-- **Ajuste:** Feito via menu para garantir que leituras em aberto sejam 0.0V.
+| Opção | Descrição |
+|:---|:---|
+| **OFF** (Padrão) | Bipes ativos |
+| **ON** | Silencioso (apenas alertas visuais) |
 
-### ZMPT Scale (Calibração AC)
-- **Função:** Fator multiplicador para a leitura do sensor de tensão AC.
-- **Importância:** Cada módulo ZMPT101B possui uma sensibilidade levemente diferente devido ao potenciômetro físico.
-- **Ajuste:** Compare a leitura com um multímetro de bancada e ajuste o fator de escala no menu.
+### Volume do Buzzer
+
+- **GPIO:** 26 (DAC)
+- **Frequência:** 1kHz a 4kHz (tom)
 
 ---
 
-## 3. Dados Armazenados
+## Banco de Dados (COMPBD.CSV)
 
-| Chave | Tipo | Descrição |
+### Localização
+
+O arquivo deve estar na **raiz** do cartão SD:
+
+```
+/COMPBD.CSV
+```
+
+### Formato do Arquivo
+
+```
+Tipo,hFE_Min,hFE_Max,Vf_Min,Vf_Max,PartNumber
+NPN,100,200,0.6,0.7,BC547
+NPN,200,400,0.6,0.7,BC548
+PNP,100,200,0.6,0.7,BC557
+DIODE,0.6,0.7,,,1N4148
+LED_RED,1.8,2.0,,,LED_5MM_RED
+```
+
+### Campos
+
+| Campo | Descrição | Exemplo |
 |:---|:---|:---|
-| `offset1` | Float | Calibração do ADC 1 |
-| `offset2` | Float | Calibração do ADC 2 |
-| `darkMode` | Bool | (Reservado para temas futuros) |
-| `silentMode` | Bool | Silenciar buzzer |
-| `backlight` | Int | Nível de brilho (0-255) |
-| `zmptScale` | Float | Escala do sensor AC |
-| `total` | ULong | Total de medições realizadas |
-| `faulty` | ULong | Total de componentes defeituosos |
+| Tipo | Tipo do componente | NPN, PNP, DIODE, LED |
+| hFE_Min | Ganho mínimo | 100 |
+| hFE_Max | Ganho máximo | 200 |
+| Vf_Min | Tensão direta mínima | 0.6 |
+| Vf_Max | Tensão direta máxima | 0.7 |
+| PartNumber | Identificação | BC547 |
 
 ---
 
-## 4. Reset de Fábrica
+## Logging e Dados
 
-Para restaurar os valores padrão (Limpando a NVS):
-1. Acesse o menu **Config**.
-2. Selecione a opção **"Limpar Tudo"** (se disponível) ou reflashe o firmware com a opção `Erase Flash` no PlatformIO.
+### Arquivos no SD Card
+
+| Arquivo | Descrição | Formato |
+|:---|:---|:---|
+| **COMPBD.CSV** | Banco de dados componentes | CSV |
+| **LOG.TXT** | Histórico de medições | Texto |
+| **CONFIG.DAT** | Configuraç��es (backup) | Binário |
+
+### Formato do LOG.TXT
+
+```
+[2026-04-24 14:30:25] Auto-Detect: Resistor 10kΩ
+[2026-04-24 14:31:10] Multímetro DC: V=5.02V I=0.45A
+[2026-04-24 14:32:05] Temperatura: 25.3°C
+```
 
 ---
 
-## 5. Notas de Segurança
+## Reset de Fábrica
 
-> [!WARNING]
-> A calibração do **ZMPT101B** envolve medir tensões AC (110V/220V). **EXTREMO CUIDADO** ao manipular a rede elétrica. Nunca abra o aparelho ou toque nos terminais enquanto estiver conectado à tomada.
+### Método 1: Menu de Configurações
+
+1. Acesse **Ajustes → Limpar Tudo**
+2. Confirme a ação
+3. O dispositivo reiniciará
+
+### Método 2: PlatformIO (Completo)
+
+```bash
+# Apagar flash antes de enviar
+pio run -e cyd --target erase
+pio run -e cyd --target upload
+```
+
+> ⚠️ Isso apaga TODAS as configurações e dados.
+
+---
+
+## Timeout e Economia de Energia
+
+### Tempo de Espera
+
+O display permanece ligado enquanto houver atividade. Para economia:
+
+| Ajuste | Descrição |
+|:---|:---|
+| **Timeout** | Tempo para dimmer automático |
+| **Sleep** | Modo de baixo consumo |
+
+---
+
+## Atualização do Firmware
+
+### Via USB (UART)
+
+```bash
+pio run -e cyd --target upload
+```
+
+### Via OTA (Wireless)
+
+```bash
+pio device monitor --upload-port 192.168.1.100
+```
+
+---
+
+## Avisos de Segurança
+
+> **🔴 PERIGO:** A calibração do ZMPT101B envolve tensão de rede. Sempre desconecte antes de manipular!
+
+> **⚠️ ATENÇÃO:** Use apenas ferramentas isoladas ao trabalhar com tensões superiores a 50V.
+
+---
+
+<p align="center">
+<i>Component Tester PRO v3.0 — Configurações</i>
+</p>

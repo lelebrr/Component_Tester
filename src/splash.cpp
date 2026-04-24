@@ -1,5 +1,5 @@
 // ============================================================================
-// Component Tester PRO v3.1 — Splash Screen
+// Sondvolt v3.1 — Splash Screen
 // Professional startup animation
 // ============================================================================
 
@@ -33,16 +33,19 @@ void draw_splash_screen() {
     tft.setTextColor(C_WHITE);
     tft.setTextSize(3);
     tft.setTextDatum(TC_DATUM);
-    tft.setCursor(SCREEN_W / 2, 140);
-    tft.print("Component");
-    tft.setCursor(SCREEN_W / 2, 168);
-    tft.setTextSize(4);
+    tft.setCursor(SCREEN_W / 2, 130);
+    tft.print("SOND");
+    tft.setTextSize(5);
     tft.setTextColor(C_GREEN);
-    tft.print("Tester");
+    tft.print("VOLT");
     tft.setTextSize(1);
     tft.setTextColor(C_CYAN);
-    tft.setCursor(SCREEN_W / 2, 195);
-    tft.print("PRO v3.1");
+    tft.setCursor(SCREEN_W / 2, 170);
+    tft.print("Component Tester Pro");
+    tft.setTextSize(1);
+    tft.setTextColor(C_WHITE);
+    tft.setCursor(SCREEN_W / 2, 190);
+    tft.print("v3.1");
     tft.setTextDatum(TL_DATUM);
     
     // Version

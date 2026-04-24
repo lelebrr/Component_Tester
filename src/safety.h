@@ -1,5 +1,5 @@
 // ============================================================================
-// Component Tester PRO v3.1 — Sistema de Segurança Elétrica
+// Sondvolt v3.1 — Sistema de Segurança Elétrica
 // Descrição: Proteção completa contra tensões perigosas (220V AC)
 // Versão: CYD Edition para ESP32-2432S028R
 // ============================================================================

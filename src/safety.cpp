@@ -1,123 +1,104 @@
 // ============================================================================
-// Component Tester PRO v3.1 — Sistema de Segurança Elétrica
-// Descrição: Proteção completa contra tensões perigosas (220V AC)
-// Versão: CYD Edition para ESP32-2432S028R
+// Sondvolt v3.x — Sistema de Seguranca Eletrica
+// Hardware: ESP32-2432S028R (Cheap Yellow Display)
+// ============================================================================
+// Arquivo: safety.cpp
+// Descricao: Implementacao do sistema de seguranca contra tensoes perigosas
 // ============================================================================
 
 #include "safety.h"
 #include "config.h"
-#include "globals.h"
-#include "leds.h"
-#include "buzzer.h"
+#include "pins.h"
 #include "graphics.h"
-
-#include <TFT_eSPI.h>
-#include <Arduino.h>
+#include "buzzer.h"
 
 // ============================================================================
-// VARIÁVEIS GLOBAIS DO MÓDULO
+// VARIAVEIS GLOBAIS
 // ============================================================================
 
-SafetyStatus safetyStatus = {
-    .state = SAFETY_STATE_SAFE,
-    .alertLevel = SAFETY_ALERT_NONE,
-    .lastDetectedVoltage = 0.0f,
-    .hasFuseInstalled = false,
-    .hasVaristorInstalled = false,
-    .lockoutEndTime = 0,
-    .lastCheckTime = 0,
-    .dangerCount = 0,
-    .safetyAcknowledged = false
-};
-
+SafetyStatus safetyStatus;
 bool safetyCheckEnabled = true;
 bool safetySoundEnabled = true;
 bool safetyLedEnabled = true;
 bool safetyAutoLockoutEnabled = true;
 
-// Controle de LED flash
-static bool alertFlashActive = false;
-static unsigned long alertFlashTimer = 0;
-static unsigned long alertFlashInterval = SAFETY_LED_FLASH_FAST;
-static bool alertLedState = false;
-
-// Controle de beep
-static bool alertSoundActive = false;
-static unsigned long alertSoundTimer = 0;
-static unsigned long alertSoundDuration = 0;
+static TaskHandle_t safetyTaskHandle = nullptr;
+static bool alertActive = false;
 
 // ============================================================================
-// INICIALIZAÇÃO
+// INICIALIZACAO
 // ============================================================================
 
 void safety_init() {
-    Serial.println(F("[SAFETY] Initializing safety system..."));
-    
-    safety_reset();
-    
-    safetyCheckEnabled = true;
-    safetySoundEnabled = true;
-    safetyLedEnabled = true;
-    safetyAutoLockoutEnabled = true;
-    
-    alertFlashActive = false;
-    alertSoundActive = false;
-    
-    Serial.println(F("[SAFETY] Safety system ready"));
+    memset(&safetyStatus, 0, sizeof(SafetyStatus));
+
+    safetyStatus.state = SAFETY_STATE_SAFE;
+    safetyStatus.hasFuseInstalled = false;
+    safetyStatus.hasVaristorInstalled = false;
+    safetyStatus.safetyAcknowledged = true;
+
+    pinMode(PIN_LED_RED, OUTPUT);
+    pinMode(PIN_LED_GREEN, OUTPUT);
+
+    digitalWrite(PIN_LED_RED, LOW);
+    digitalWrite(PIN_LED_GREEN, HIGH);
+
+    DBG("Sistema de seguranca inicializado");
 }
 
 void safety_reset() {
+    memset(&safetyStatus, 0, sizeof(SafetyStatus));
+
     safetyStatus.state = SAFETY_STATE_SAFE;
-    safetyStatus.alertLevel = SAFETY_ALERT_NONE;
-    safetyStatus.lastDetectedVoltage = 0.0f;
-    safetyStatus.hasFuseInstalled = false;
-    safetyStatus.hasVaristorInstalled = false;
-    safetyStatus.lockoutEndTime = 0;
-    safetyStatus.lastCheckTime = 0;
-    safetyStatus.dangerCount = 0;
-    safetyStatus.safetyAcknowledged = false;
-    
+    safetyStatus.safetyAcknowledged = true;
+
+    digitalWrite(PIN_LED_RED, LOW);
+    digitalWrite(PIN_LED_GREEN, HIGH);
+
     safety_alert_stop();
 }
 
 // ============================================================================
-// VERIFICAÇÃO
+// VERIFICACAO
 // ============================================================================
 
 SafetyCheckResult safety_check_voltage(float voltage) {
     SafetyCheckResult result;
-    
+    memset(&result, 0, sizeof(SafetyCheckResult));
+
     result.detectedVoltage = voltage;
-    result.isAcDanger = safety_is_ac_danger(voltage);
-    result.isDcDanger = safety_is_dc_danger(voltage);
-    result.isShortCircuit = false;
-    
-    // Determina nível de alerta
-    if (voltage > SAFETY_VOLTAGE_220V_MIN) {
+
+    if(voltage >= SAFETY_VOLTAGE_DANGER_AC) {
+        result.isAcDanger = true;
+        result.alertLevel = SAFETY_ALERT_CRITICAL;
+        result.message = SAFETY_MSG_DANGER_220V;
+    } else if(voltage >= SAFETY_VOLTAGE_220V_MIN && voltage <= SAFETY_VOLTAGE_220V_MAX) {
+        result.isAcDanger = true;
         result.alertLevel = SAFETY_ALERT_HIGH;
         result.message = SAFETY_MSG_DANGER_220V;
-    } else if (voltage > SAFETY_VOLTAGE_DANGER_AC) {
+    } else if(voltage >= SAFETY_VOLTAGE_110V_MIN && voltage <= SAFETY_VOLTAGE_110V_MAX) {
+        result.isAcDanger = true;
         result.alertLevel = SAFETY_ALERT_MEDIUM;
         result.message = SAFETY_MSG_DANGER_HIGH;
-    } else if (voltage > SAFETY_VOLTAGE_110V_MAX) {
+    } else if(voltage >= 50.0f) {
+        result.isAcDanger = true;
         result.alertLevel = SAFETY_ALERT_LOW;
-        result.message = " TENSÃO DETECTADA ";
+        result.message = SAFETY_MSG_DANGER_HIGH;
     } else {
+        result.isSafe = true;
         result.alertLevel = SAFETY_ALERT_NONE;
-        result.message = " OK ";
+        result.message = " ";
     }
-    
-    result.isSafe = (result.alertLevel == SAFETY_ALERT_NONE);
-    
-    // Atualiza estado global
-    safetyStatus.lastDetectedVoltage = voltage;
-    safetyStatus.alertLevel = result.alertLevel;
-    
+
+    if(voltage >= SAFETY_VOLTAGE_DC_DANGER) {
+        result.isDcDanger = true;
+    }
+
     return result;
 }
 
 bool safety_is_ac_danger(float voltage) {
-    return (voltage >= SAFETY_VOLTAGE_DANGER_AC);
+    return (voltage >= SAFETY_VOLTAGE_220V_MIN);
 }
 
 bool safety_is_dc_danger(float voltage) {
@@ -125,7 +106,7 @@ bool safety_is_dc_danger(float voltage) {
 }
 
 bool safety_is_short_circuit(float resistance) {
-    return (resistance > 0.0f && resistance < SAFETY_SHORT_CIRCUIT);
+    return (resistance < SAFETY_SHORT_CIRCUIT);
 }
 
 // ============================================================================
@@ -133,293 +114,168 @@ bool safety_is_short_circuit(float resistance) {
 // ============================================================================
 
 void safety_trigger_alert(SafetyAlertLevel level) {
-    if (level == SAFETY_ALERT_NONE) {
-        safety_alert_stop();
-        return;
-    }
-    
-    // Atualiza estado
-    safetyStatus.state = SAFETY_STATE_DANGER;
     safetyStatus.alertLevel = level;
-    safetyStatus.dangerCount++;
-    
-    // Ativa LED flash
-    if (safetyLedEnabled) {
-        switch (level) {
-            case SAFETY_ALERT_CRITICAL:
-            case SAFETY_ALERT_HIGH:
-                alertFlashInterval = SAFETY_LED_FLASH_FAST;
-                break;
-            case SAFETY_ALERT_MEDIUM:
-                alertFlashInterval = SAFETY_LED_FLASH_MED;
-                break;
-            default:
-                alertFlashInterval = SAFETY_LED_FLASH_SLOW;
-                break;
+    alertActive = true;
+
+    if(level >= SAFETY_ALERT_HIGH) {
+        safetyStatus.state = SAFETY_STATE_DANGER;
+
+        if(safetySoundEnabled) {
+            safety_alert_sound_danger();
         }
-        safety_alert_led_flash(true);
-    }
-    
-    // Ativa alerta sonoro
-    if (safetySoundEnabled) {
-        safety_alert_sound_danger();
+
+        if(safetyLedEnabled) {
+            safety_alert_led_flash(true);
+        }
+
+        safety_draw_danger_screen(SAFETY_MSG_DANGER_220V, safetyStatus.lastDetectedVoltage);
+
+    } else if(level >= SAFETY_ALERT_MEDIUM) {
+        safetyStatus.state = SAFETY_STATE_WARNING;
+
+        if(safetySoundEnabled) {
+            buzzer_beep(BUZZER_FREQ_WARNING, BUZZER_DURATION_WARNING);
+        }
+
+        if(safetyLedEnabled) {
+            digitalWrite(PIN_LED_RED, HIGH);
+        }
+
+    } else {
+        safetyStatus.state = SAFETY_STATE_SAFE;
+        safety_alert_stop();
     }
 }
 
 void safety_alert_led_flash(bool enable) {
-    alertFlashActive = enable;
-    if (enable) {
-        alertFlashTimer = millis();
-        alertLedState = true;
-        set_red_led(true);
+    if(enable) {
+        digitalWrite(PIN_LED_RED, HIGH);
+        delay(SAFETY_LED_FLASH_FAST);
+        digitalWrite(PIN_LED_RED, LOW);
+        delay(SAFETY_LED_FLASH_FAST);
     } else {
-        set_red_led(false);
+        digitalWrite(PIN_LED_RED, LOW);
     }
 }
 
 void safety_alert_sound_danger() {
-    if (!safetySoundEnabled) return;
-    
-    alertSoundActive = true;
-    alertSoundTimer = millis();
-    alertSoundDuration = SAFETY_BEEP_DURATION_LONG;
-    
-    // Toca beep de perigo
-    buzzer_beep_duration(SAFETY_BEEP_DANGER, SAFETY_BEEP_DURATION_SLOW);
+    for(uint8_t i = 0; i < 3; i++) {
+        buzzer_beep(SAFETY_BEEP_DANGER, SAFETY_BEEP_DURATION_FAST);
+        delay(SAFETY_BEEP_DURATION_FAST);
+    }
 }
 
 void safety_alert_sound_confirm() {
-    if (!safetySoundEnabled) return;
-    
-    buzzer_beep_duration(SAFETY_BEEP_CONFIRM, SAFETY_BEEP_DURATION_FAST);
-    delay(150);
-    buzzer_beep_duration(SAFETY_BEEP_OK, SAFETY_BEEP_DURATION_FAST);
+    buzzer_beep(SAFETY_BEEP_CONFIRM, 200);
+    delay(100);
+    buzzer_beep(SAFETY_BEEP_OK, 200);
 }
 
 void safety_alert_stop() {
-    alertFlashActive = false;
-    alertSoundActive = false;
-    set_red_led(false);
-    set_green_led(false);
-    buzzer_no_tone();
+    alertActive = false;
+    digitalWrite(PIN_LED_RED, LOW);
+    digitalWrite(PIN_LED_GREEN, HIGH);
 }
 
 // ============================================================================
-// TELA DE PERIGO
+// TELAS DE PERIGO
 // ============================================================================
 
 void safety_draw_danger_screen(const char* message, float voltage) {
-    // Background vermelho
-    tft.fillScreen(SAFETY_COLOR_ALERT_BG);
-    
-    // Banner de perigo
-    tft.fillRect(0, 0, SCREEN_W, 50, SAFETY_COLOR_DANGER);
-    
-    // Ícone de perigo
-    tft.setTextColor(C_WHITE);
-    tft.setTextSize(3);
-    tft.setTextDatum(TC_DATUM);
-    tft.setCursor(SCREEN_W / 2, 15);
-    tft.print("⚠ PERIGO ⚠");
-    
-    // Mensagem principal
-    tft.setTextColor(C_WHITE);
-    tft.setTextSize(2);
-    tft.setCursor(SCREEN_W / 2, 70);
-    tft.print(message);
-    
-    // Valor da tensão
-    char voltageStr[16];
-    dtostrf(voltage, 1, 1, voltageStr);
-    
-    tft.fillRoundRect(40, 95, SCREEN_W - 80, 45, 8, C_BLACK);
-    tft.drawRoundRect(40, 95, SCREEN_W - 80, 45, 8, SAFETY_COLOR_DANGER);
-    
-    tft.setTextColor(SAFETY_COLOR_DANGER);
-    tft.setTextSize(4);
-    tft.setTextDatum(TC_DATUM);
-    tft.setCursor(SCREEN_W / 2, 118);
-    tft.print(voltageStr);
-    
-    tft.setTextSize(2);
-    tft.setCursor(SCREEN_W / 2 + 90, 118);
-    tft.print("V");
-    
-    // Instrução
-    tft.setTextColor(C_WHITE);
-    tft.setTextSize(1);
-    tft.setTextDatum(TC_DATUM);
-    tft.setCursor(SCREEN_W / 2, 160);
-    tft.print(SAFETY_MSG_REMOVE);
-    
-    // Caixa de instrução
-    tft.fillRoundRect(20, 180, SCREEN_W - 40, 35, 6, C_BLACK);
-    tft.drawRoundRect(20, 180, SCREEN_W - 40, 35, 6, C_WHITE);
-    
-    tft.setTextColor(C_YELLOW);
-    tft.setTextSize(1);
-    tft.setCursor(SCREEN_W / 2, 198);
-    tft.print("PRESSIONE OK PARA RECONHECER");
-    
-    tft.setTextDatum(TL_DATUM);
+    pTFT->fillScreen(SAFETY_COLOR_ALERT_BG);
+
+    pTFT->setTextColor(SAFETY_COLOR_DANGER);
+    pTFT->setTextDatum(MC_DATUM);
+    pTFT->setFreeFont(FMB);
+    pTFT->drawString("ALERTA DE SEGURANCA", SCREEN_W/2, 40);
+
+    char voltStr[32];
+    snprintf(voltStr, sizeof(voltStr), "%.1f V", voltage);
+
+    pTFT->setTextColor(C_WHITE);
+    pTFT->setFreeFont(FMB);
+    pTFT->drawString(voltStr, SCREEN_W/2, 80);
+
+    pTFT->setTextColor(C_YELLOW);
+    pTFT->setFreeFont(FMB);
+    pTFT->drawString(message, SCREEN_W/2, 120);
+
+    pTFT->fillRoundRect(20, 160, SCREEN_W - 40, 30, 4);
+    pTFT->setTextColor(C_BLACK);
+    pTFT->drawString("CONTINUAR IGUALVEL", SCREEN_W/2, 175);
+
+    pTFT->fillRoundRect(20, 200, SCREEN_W - 40, 30, 4);
+    pTFT->setTextColor(C_TEXT);
+    pTFT->drawString("CANCELAR", SCREEN_W/2, 215);
 }
 
 void safety_draw_lockout_screen(unsigned long remainingMs) {
-    clear_screen();
-    
-    // Background escuro
-    tft.fillScreen(C_BLACK);
-    
-    // Banner de bloqueio
-    tft.fillRect(0, 0, SCREEN_W, 45, C_RED);
-    
-    tft.setTextColor(C_WHITE);
-    tft.setTextSize(2);
-    tft.setTextDatum(TC_DATUM);
-    tft.setCursor(SCREEN_W / 2, 15);
-    tft.print("⚠ BLOQUEADO ⚠");
-    
-    // Mensagem
-    tft.setTextColor(C_RED);
-    tft.setTextSize(1);
-    tft.setTextDatum(TC_DATUM);
-    tft.setCursor(SCREEN_W / 2, 60);
-    tft.print("DETECTADA TENSÃO PERIGOSA");
-    
-    tft.setCursor(SCREEN_W / 2, 80);
-    tft.print("EQUIPAMENTO BLOQUEADO");
-    
-    // Timer
-    unsigned long seconds = (remainingMs / 1000) + 1;
-    
-    tft.fillRoundRect(SCREEN_W / 2 - 60, 105, 120, 50, 8, C_DARK_GREY);
-    tft.drawRoundRect(SCREEN_W / 2 - 60, 105, 120, 50, 8, C_RED);
-    
-    tft.setTextColor(C_WHITE);
-    tft.setTextSize(3);
-    tft.setTextDatum(TC_DATUM);
-    tft.setCursor(SCREEN_W / 2, 130);
-    if (seconds >= 60) {
-        tft.print("0:00");
-    } else {
-        char timeStr[8];
-        snprintf(timeStr, sizeof(timeStr), "%lu", seconds);
-        tft.print(timeStr);
-    }
-    
-    tft.setTextSize(1);
-    tft.setCursor(SCREEN_W / 2, 160);
-    tft.print("SEGUNDOS RESTANTES");
-    
-    // Barra de progresso
-    uint8_t progress = (uint8_t)((SAFETY_LOCKOUT_MS - remainingMs) * 100 / SAFETY_LOCKOUT_MS);
-    draw_progress_bar(30, 180, SCREEN_W - 60, 10, progress, C_RED, C_DARK_GREY);
-    
-    tft.setTextColor(C_GREY);
-    tft.setCursor(SCREEN_W / 2, 200);
-    tft.setTextDatum(TC_DATUM);
-    tft.print("AGUARDE DESBLOQUEIO...");
-    
-    tft.setTextDatum(TL_DATUM);
+    pTFT->fillScreen(C_BLACK);
+
+    pTFT->setTextColor(SAFETY_COLOR_WARNING);
+    pTFT->setTextDatum(MC_DATUM);
+    pTFT->setFreeFont(FMB);
+    pTFT->drawString("BLOQUEADO", SCREEN_W/2, 60);
+
+    pTFT->setTextColor(C_TEXT);
+    pTFT->setFreeFont(FMB);
+    pTFT->drawString("Equipamento bloqueado por", SCREEN_W/2, 90);
+    pTFT->drawString("seguranca", SCREEN_W/2, 110);
+
+    char timeStr[32];
+    uint16_t seconds = remainingMs / 1000;
+    snprintf(timeStr, sizeof(timeStr), "%d seg", seconds);
+
+    pTFT->setTextColor(SAFETY_COLOR_DANGER);
+    pTFT->setFreeFont(FMB);
+    pTFT->drawString(timeStr, SCREEN_W/2, 150);
+
+    pTFT->setTextColor(C_TEXT_SECONDARY);
+    pTFT->setFreeFont(FMBO);
+    pTFT->drawString("Aguarde...", SCREEN_W/2, 190);
 }
 
 void safety_draw_confirm_screen() {
-    clear_screen();
-    
-    // Background
-    tft.fillScreen(C_BLACK);
-    
-    // Banner amarelo de aviso
-    tft.fillRect(0, 0, SCREEN_W, 50, C_YELLOW);
-    
-    tft.setTextColor(C_BLACK);
-    tft.setTextSize(2);
-    tft.setTextDatum(TC_DATUM);
-    tft.setCursor(SCREEN_W / 2, 15);
-    tft.print("⚠ AVISO DE SEGURANÇA ⚠");
-    
-    // Conteúdo
-    tft.setTextColor(C_WHITE);
-    tft.setTextSize(1);
-    tft.setTextDatum(TC_DATUM);
-    tft.setCursor(SCREEN_W / 2, 70);
-    tft.print("Você está prestes a medir");
-    
-    tft.setTextColor(C_YELLOW);
-    tft.setCursor(SCREEN_W / 2, 90);
-    tft.print("TENSÃO DA REDE ELÉTRICA!");
-    
-    // Aviso importante
-    tft.fillRoundRect(20, 110, SCREEN_W - 40, 50, 6, C_DARK_GREY);
-    tft.drawRoundRect(20, 110, SCREEN_W - 40, 50, 6, C_RED);
-    
-    tft.setTextColor(C_YELLOW);
-    tft.setCursor(SCREEN_W / 2, 125);
-    tft.setTextDatum(TC_DATUM);
-    tft.print("INSTALE FUSÍVEL E VARISTOR");
-    tft.setCursor(SCREEN_W / 2, 145);
-    tft.print("ANTES DE CONTINUAR!");
-    
-    // Botões de confirmação
-    int16_t btnW = 120;
-    int16_t btnH = 35;
-    int16_t btnY = 180;
-    
-    // Botão CONFIRMAR (verde)
-    tft.fillRoundRect(SCREEN_W / 2 - btnW - 10, btnY, btnW, btnH, 6, C_GREEN);
-    tft.drawRoundRect(SCREEN_W / 2 - btnW - 10, btnY, btnW, btnH, 6, C_WHITE);
-    
-    tft.setTextColor(C_BLACK);
-    tft.setTextDatum(TC_DATUM);
-    tft.setCursor(SCREEN_W / 2 - btnW / 2 - 10, btnY + btnH / 2);
-    tft.setTextSize(1);
-    tft.print("TENHO");
-    
-    tft.setCursor(SCREEN_W / 2 - btnW / 2 - 10, btnY + btnH / 2 + 12);
-    tft.print("PROTEÇÃO");
-    
-    // Botão CANCELAR (vermelho)
-    tft.fillRoundRect(SCREEN_W / 2 + 10, btnY, btnW, btnH, 6, C_RED);
-    tft.drawRoundRect(SCREEN_W / 2 + 10, btnY, btnW, btnH, 6, C_WHITE);
-    
-    tft.setTextColor(C_WHITE);
-    tft.setCursor(SCREEN_W / 2 + btnW / 2 + 10, btnY + btnH / 2);
-    tft.print("CANCELAR");
-    
-    tft.setTextDatum(TL_DATUM);
+    pTFT->fillScreen(C_DARK);
+
+    pTFT->setTextColor(C_WARNING);
+    pTFT->setTextDatum(MC_DATUM);
+    pTFT->setFreeFont(FMB);
+    pTFT->drawString("AVISO IMPORTANTE", SCREEN_W/2, 40);
+
+    pTFT->setTextColor(C_TEXT);
+    pTFT->setFreeFont(FMB);
+    pTFT->drawString("Para medir 220V AC, voce deve ter:", SCREEN_W/2, 80);
+
+    pTFT->setTextColor(C_TEXT_SECONDARY);
+    pTFT->setFreeFont(FMB);
+    pTFT->drawString("* Fusivel de protecao (1A)", SCREEN_W/2, 110);
+    pTFT->drawString("* Varistor (275V)", SCREEN_W/2, 130);
+    pTFT->drawString("* Circuitos de protecao", SCREEN_W/2, 150);
+
+    pTFT->fillRoundRect(10, 180, SCREEN_W/2 - 15, 30, 4);
+    pTFT->setTextColor(C_BLACK);
+    pTFT->drawString("TENHO PROTECAO", SCREEN_W/2 - 40, 195);
+
+    pTFT->fillRoundRect(SCREEN_W/2 + 5, 180, SCREEN_W/2 - 15, 30, 4);
+    pTFT->setTextColor(C_TEXT);
+    pTFT->drawString("CANCELAR", SCREEN_W/2 + 40, 195);
 }
 
 void safety_draw_check_screen() {
-    clear_screen();
-    
-    // Banner
-    tft.fillRect(0, 0, SCREEN_W, 40, C_YELLOW);
-    
-    tft.setTextColor(C_BLACK);
-    tft.setTextSize(1);
-    tft.setTextDatum(TC_DATUM);
-    tft.setCursor(SCREEN_W / 2, 12);
-    tft.print("VERIFICAÇÃO DE SEGURANÇA");
-    
-    // Instrução
-    tft.setTextColor(C_WHITE);
-    tft.setCursor(SCREEN_W / 2, 60);
-    tft.setTextSize(1);
-    tft.print("Desconecte as pontas de prova");
-    tft.setCursor(SCREEN_W / 2, 80);
-    tft.print("antes de selecionar modo AC");
-    
-    // Indicador
-    tft.fillCircle(SCREEN_W / 2, 120, 30, C_GREEN);
-    tft.drawCircle(SCREEN_W / 2, 120, 30, C_WHITE);
-    
-    tft.setTextColor(C_WHITE);
-    tft.setTextSize(2);
-    tft.setTextDatum(TC_DATUM);
-    tft.setCursor(SCREEN_W / 2, 118);
-    tft.print("✓");
-    
-    tft.setTextDatum(TL_DATUM);
+    pTFT->fillScreen(C_BLACK);
+
+    pTFT->setTextColor(SAFETY_COLOR_SAFE);
+    pTFT->setTextDatum(MC_DATUM);
+    pTFT->setFreeFont(FMB);
+    pTFT->drawString("VERIFICANDO", SCREEN_W/2, 60);
+
+    pTFT->setTextColor(C_TEXT);
+    pTFT->setFreeFont(FMB);
+    pTFT->drawString("Verificando tensoes...", SCREEN_W/2, 100);
+
+    pTFT->drawString("Nao conecte componentes", SCREEN_W/2, 130);
+    pTFT->drawString("energizados!", SCREEN_W/2, 150);
 }
 
 // ============================================================================
@@ -427,36 +283,41 @@ void safety_draw_check_screen() {
 // ============================================================================
 
 void safety_activate_lockout() {
-    if (!safetyAutoLockoutEnabled) return;
-    
-    safetyStatus.state = SAFETY_STATE_LOCKOUT;
-    safetyStatus.lockoutEndTime = millis() + SAFETY_LOCKOUT_MS;
-    safetyStatus.dangerCount = 0;
-    
-    Serial.println(F("[SAFETY] Lockout activated"));
-    
-    safety_alert_stop();
+    if(safetyAutoLockoutEnabled) {
+        safetyStatus.state = SAFETY_STATE_LOCKOUT;
+        safetyStatus.lockoutEndTime = millis() + SAFETY_LOCKOUT_MS;
+
+        digitalWrite(PIN_LED_GREEN, LOW);
+        digitalWrite(PIN_LED_RED, HIGH);
+
+        if(safetySoundEnabled) {
+            safety_alert_sound_danger();
+        }
+
+        DBG("Bloqueio de seguranca ativado");
+    }
 }
 
 void safety_deactivate_lockout() {
     safetyStatus.state = SAFETY_STATE_SAFE;
     safetyStatus.lockoutEndTime = 0;
-    safetyStatus.safetyAcknowledged = false;
-    
-    Serial.println(F("[SAFETY] Lockout deactivated"));
+
+    digitalWrite(PIN_LED_GREEN, HIGH);
+    digitalWrite(PIN_LED_RED, LOW);
+
+    if(safetySoundEnabled) {
+        buzzer_beep(SAFETY_BEEP_OK, 200);
+    }
+
+    DBG("Bloqueio de seguranca desativado");
 }
 
 bool safety_is_locked_out() {
-    if (safetyStatus.state == SAFETY_STATE_LOCKOUT) {
-        if (millis() >= safetyStatus.lockoutEndTime) {
-            // Verifica se tempo acabou
-            if (safetyStatus.safetyAcknowledged) {
-                safety_deactivate_lockout();
-                return false;
-            } else {
-                // Mantém bloqueado até reconhecimento
-                return true;
-            }
+    if(safetyStatus.state == SAFETY_STATE_LOCKOUT) {
+        unsigned long now = millis();
+        if(now >= safetyStatus.lockoutEndTime) {
+            safety_deactivate_lockout();
+            return false;
         }
         return true;
     }
@@ -464,133 +325,62 @@ bool safety_is_locked_out() {
 }
 
 bool safety_can_proceed() {
-    // Verifica se não está bloqueado
-    if (safety_is_locked_out()) {
+    if(safety_is_locked_out()) {
         return false;
     }
-    
-    // Verifica estado de segurança
-    if (safetyStatus.state == SAFETY_STATE_DANGER) {
-        if (safetyStatus.safetyAcknowledged) {
-            return true;
-        }
+
+    if(!safetyStatus.safetyAcknowledged) {
         return false;
     }
-    
+
+    if(safetyStatus.state >= SAFETY_STATE_DANGER) {
+        return false;
+    }
+
     return true;
 }
 
 void safety_acknowledge_warning() {
     safetyStatus.safetyAcknowledged = true;
-    safety_alert_stop();
-    
-    // Se estava em bloqueio, inicia contagem regressiva
-    if (safetyStatus.state == SAFETY_STATE_LOCKOUT) {
-        safetyStatus.state = SAFETY_STATE_WARNING;
-    }
+    safetyStatus.state = SAFETY_STATE_SAFE;
 }
 
 // ============================================================================
-// SPLASH DE SEGURANÇA
+// SPLASH DE SEGURANCA
 // ============================================================================
 
 void safety_draw_splash() {
-    // Background
-    tft.fillScreen(C_BLACK);
-    
-    // Banner de segurança
-    tft.fillRect(0, 0, SCREEN_W, 45, C_RED);
-    
-    // Ícone de peringatan
-    tft.setTextColor(C_WHITE);
-    tft.setTextSize(3);
-    tft.setTextDatum(TC_DATUM);
-    tft.setCursor(SCREEN_W / 2, 15);
-    tft.print("⚠ SEGURANÇA ⚠");
-    
-    // Título
-    tft.setTextColor(C_WHITE);
-    tft.setTextSize(2);
-    tft.setTextDatum(TC_DATUM);
-    tft.setCursor(SCREEN_W / 2, 65);
-    tft.print("SISTEMA DEPROTEÇÃO");
-    
-    tft.setCursor(SCREEN_W / 2, 85);
-    tft.setTextColor(C_YELLOW);
-    tft.print("220V AC ATIVO");
-    
-    // Advertências
-    tft.setTextColor(C_WHITE);
-    tft.setTextSize(1);
-    tft.setCursor(SCREEN_W / 2, 115);
-    tft.setTextDatum(TC_DATUM);
-    tft.print("NÃO CONECTE DIRETAMENTE EM");
-    
-    tft.setTextColor(C_YELLOW);
-    tft.setCursor(SCREEN_W / 2, 135);
-    tft.print("220V SEM PROTEÇÃO!");
-    
-    // Lista de proteção
-    tft.setTextColor(C_GREY);
-    tft.setCursor(SCREEN_W / 2, 165);
-    tft.setTextDatum(TC_DATUM);
-    tft.print("• Fusível de proteção");
-    tft.setCursor(SCREEN_W / 2, 185);
-    tft.print("• Varistor (MOV)");
-    
-    // Footer
-    tft.setTextColor(C_DARK_GREY);
-    tft.setTextSize(1);
-    tft.setCursor(SCREEN_W / 2, 215);
-    tft.setTextDatum(TC_DATUM);
-    tft.print("Component Tester PRO v3.1");
-    
-    tft.setTextDatum(TL_DATUM);
+    pTFT->fillScreen(C_BLACK);
+
+    pTFT->setTextColor(SAFETY_COLOR_WARNING);
+    pTFT->setTextDatum(MC_DATUM);
+    pTFT->setFreeFont(FMB);
+    pTFT->drawString("AVISO DE SEGURANCA", SCREEN_W/2, 50);
+
+    pTFT->setTextColor(C_TEXT);
+    pTFT->setFreeFont(FMB);
+    pTFT->drawString("Este equipamento pode", SCREEN_W/2, 90);
+    pTFT->drawString("medir tensoes ate 250V AC", SCREEN_W/2, 115);
+
+    pTFT->setTextColor(C_ERROR);
+    pTFT->setFreeFont(FMB);
+    pTFT->drawString("CUIDADO: 220V E PERIGOSO!", SCREEN_W/2, 150);
+
+    pTFT->setTextColor(C_TEXT_SECONDARY);
+    pTFT->setFreeFont(FMBO);
+    pTFT->drawString("Use sempre protecao adequada", SCREEN_W/2, 185);
+    pTFT->drawString("e Circuitos de protecao", SCREEN_W/2, 205);
 }
 
 void safety_show_splash_animated() {
     safety_draw_splash();
-    
-    // Animação de pulsação
-    for (int i = 0; i < 3; i++) {
-        for (int alpha = 255; alpha >= 100; alpha -= 25) {
-            // Pulsing effect
-            delay(30);
-        }
-        for (int alpha = 100; alpha <= 255; alpha += 25) {
-            delay(30);
-        }
-    }
-    
-    delay(1500);
-}
 
-// ============================================================================
-// DETECÇÃO AUTOMÁTICA
-// ============================================================================
-
-SafetyCheckResult safety_detect_danger() {
-    SafetyCheckResult result;
-    
-    // Lê tensão atual (simulado - em produção usar multimeter)
-    extern float lastVoltage;
-    float voltage = lastVoltage;
-    
-    result = safety_check_voltage(voltage);
-    
-    // Se detectar perigo, ativa alertas
-    if (!result.isSafe) {
-        safety_trigger_alert(result.alertLevel);
-        
-        // Se nível alto, ativa bloqueio
-        if (result.alertLevel >= SAFETY_ALERT_HIGH) {
-            safety_activate_lockout();
-        }
+    for(uint8_t i = 0; i < 3; i++) {
+        buzzer_beep(SAFETY_BEEP_WARNING, 100);
+        delay(150);
     }
-    
-    safetyStatus.lastCheckTime = millis();
-    
-    return result;
+
+    delay(3000);
 }
 
 // ============================================================================
@@ -598,100 +388,122 @@ SafetyCheckResult safety_detect_danger() {
 // ============================================================================
 
 bool safety_check_before_multimeter() {
-    // Se verificação desativada, permite
-    if (!safetyCheckEnabled) {
+    if(!safetyCheckEnabled) {
         return true;
     }
-    
-    // Se já está bloqueio, mostra tela de bloqueio
-    if (safety_is_locked_out()) {
-        unsigned long remaining = 0;
-        if (safetyStatus.lockoutEndTime > millis()) {
-            remaining = safetyStatus.lockoutEndTime - millis();
-        }
-        
-        // Loop de bloqueio
-        while (safety_is_locked_out()) {
-            if (safetyStatus.lockoutEndTime > millis()) {
-                remaining = safetyStatus.lockoutEndTime - millis();
-                safety_draw_lockout_screen(remaining);
-            } else {
-                // Tempo acabou, precisa reconhecer
-                safety_draw_danger_screen(SAFETY_MSG_REMOVE, safetyStatus.lastDetectedVoltage);
-            }
-            
-            delay(100);
-        }
-        
+
+    if(safety_is_locked_out()) {
+        safety_draw_lockout_screen(safetyStatus.lockoutEndTime - millis());
         return false;
     }
-    
-    // Verifica se estado perigo
-    if (safetyStatus.state == SAFETY_STATE_DANGER && !safetyStatus.safetyAcknowledged) {
-        safety_draw_danger_screen(SAFETY_MSG_DANGER_HIGH, safetyStatus.lastDetectedVoltage);
-        
-        // Aguarda reconhecimento
-        delay(500);
-        
+
+    SafetyCheckResult check = safety_detect_danger();
+
+    if(!check.isSafe) {
+        safety_trigger_alert(check.alertLevel);
+
+        if(safetyStatus.state == SAFETY_STATE_DANGER) {
+            safety_activate_lockout();
+        }
+
         return false;
     }
-    
+
     return true;
 }
 
 bool safety_confirm_electrical_measurement() {
-    // Desenha tela de confirmação
     safety_draw_confirm_screen();
-    
-    // Aguarda input do usuário
-    // Nota: Em implementação real, usar buttons/touch
-    delay(2000);
-    
-    // Por padrão, retorna false (usuário precisa confirmar)
-    // Em implementação real, verificar botão pressionado
-    
-    safety_alert_sound_confirm();
-    
+
+    safetyStatus.state = SAFETY_STATE_CONFIRMATION;
+
+    uint32_t startTime = millis();
+
+    while(millis() - startTime < TIME_CONFIRM_TIMEOUT) {
+        uint16_t x, y;
+        if(pTFT->getTouch(&x, &y)) {
+            if(y > 180 && y < 210) {
+                if(x > 10 && x < SCREEN_W/2 - 15) {
+                    safetyStatus.hasFuseInstalled = true;
+                    safetyStatus.hasVaristorInstalled = true;
+                    safetyStatus.safetyAcknowledged = true;
+
+                    if(safetySoundEnabled) {
+                        safety_alert_sound_confirm();
+                    }
+
+                    return true;
+                } else if(x > SCREEN_W/2 + 5) {
+                    if(safetySoundEnabled) {
+                        buzzer_beep(BUZZER_FREQ_ERROR, 100);
+                    }
+
+                    return false;
+                }
+            }
+        }
+
+        delay(50);
+    }
+
     return false;
 }
 
 // ============================================================================
-// ATUALIZAÇÃO
+// ATUALIZACAO
 // ============================================================================
 
 void safety_update() {
-    unsigned long now = millis();
-    
-    // Atualiza LED flash
-    if (alertFlashActive) {
-        if (now - alertFlashTimer >= alertFlashInterval) {
-            alertFlashTimer = now;
-            alertLedState = !alertLedState;
-            set_red_led(alertLedState);
-        }
+    if(!safetyCheckEnabled) {
+        return;
     }
-    
-    // Atualiza beep
-    if (alertSoundActive) {
-        if (now - alertSoundTimer >= alertSoundDuration) {
-            alertSoundActive = false;
-            buzzer_no_tone();
-        }
+
+    if(safety_is_locked_out()) {
+        safety_draw_lockout_screen(safetyStatus.lockoutEndTime - millis());
     }
-    
-    // Verifica fim de bloqueio
-    if (safetyStatus.state == SAFETY_STATE_LOCKOUT) {
-        if (now >= safetyStatus.lockoutEndTime) {
-            if (!safetyStatus.safetyAcknowledged) {
-                // Mostra tela de perigo para reconhecimento
-                safety_draw_danger_screen(SAFETY_MSG_DANGER_220V, safetyStatus.lastDetectedVoltage);
-            }
+
+    if(alertActive && safetyLedEnabled) {
+        static unsigned long lastFlash = 0;
+        if(millis() - lastFlash > SAFETY_LED_FLASH_FAST) {
+            digitalWrite(PIN_LED_RED, !digitalRead(PIN_LED_RED));
+            lastFlash = millis();
         }
     }
 }
 
 // ============================================================================
-// CONFIGURAÇÃO
+// DETECAO AUTOMATICA
+// ============================================================================
+
+SafetyCheckResult safety_detect_danger() {
+    SafetyCheckResult result;
+    memset(&result, 0, sizeof(SafetyCheckResult));
+
+    uint16_t adcValue = analogRead(PIN_ADC_ZMPT);
+
+    float voltage = (adcValue - ZMPT_ZERO_POINT) * ZMPT_SCALE_FACTOR / 2048.0f;
+    voltage = abs(voltage);
+
+    safetyStatus.lastDetectedVoltage = voltage;
+    safetyStatus.lastCheckTime = millis();
+
+    result = safety_check_voltage(voltage);
+
+    if(!result.isSafe) {
+        safetyStatus.dangerCount++;
+
+        if(safetyStatus.dangerCount >= 3) {
+            safety_activate_lockout();
+        }
+    } else {
+        safetyStatus.dangerCount = 0;
+    }
+
+    return result;
+}
+
+// ============================================================================
+// CONFIGURACAO
 // ============================================================================
 
 void safety_set_check_enabled(bool enabled) {

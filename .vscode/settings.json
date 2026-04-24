@@ -30,18 +30,34 @@
     "editor.codeActionsOnSave": {},
     "editor.formatOnSave": false,
     "editor.inlineSuggest.enabled": false,
-    "editor.quickSuggestions": false,
+    "editor.quickSuggestions": {
+        "comments": "off",
+        "strings": "off",
+        "other": "off"
+    },
     "editor.suggestOnTriggerCharacters": false,
     "[c]": {
         "editor.inlineSuggest.enabled": false,
-        "editor.quickSuggestions": false
+        "editor.quickSuggestions": {
+            "comments": "off",
+            "strings": "off",
+            "other": "off"
+        }
     },
     "[cpp]": {
         "editor.inlineSuggest.enabled": false,
-        "editor.quickSuggestions": false
+        "editor.quickSuggestions": {
+            "comments": "off",
+            "strings": "off",
+            "other": "off"
+        }
     },
     "[python]": {
         "editor.inlineSuggest.enabled": false,
-        "editor.quickSuggestions": false
+        "editor.quickSuggestions": {
+            "comments": "off",
+            "strings": "off",
+            "other": "off"
+        }
     }
 }

@@ -9,7 +9,7 @@ Bem-vindo ao centro de documentação do **Component Tester PRO v3.0**. Este dir
 | # | Guia | Descrição | Público |
 |:-|:---|:---|:---|
 | 1 | [](../README.md) | Visão geral do projeto, recursos e especificações principais | Todos |
-| 2 | [README](README.md) | Visão geral da central de documentação | Todos |
+| 2 | [README](README.md) | Visão geral da central de documentación | Todos |
 | 3 | [Manual do Usuário](MANUAL.md) | Instruções completas de operação, navegação touch e modos de teste | Usuários |
 | 4 | [Guia de Hardware](HARDWARE.md) | Esquemas, lista de materiais completa e diagramas de ligação | Makers |
 | 5 | [Referência de Pinagem](PINOUT.md) | Mapeamento detalhado completo dos GPIOs do ESP32 CYD | Eletrônicos |
@@ -17,8 +17,12 @@ Bem-vindo ao centro de documentação do **Component Tester PRO v3.0**. Este dir
 | 7 | [Estrutura de Menus](MENUS.md) | Detalhamento da interface Grid, zonas de toque e navegação | Todos |
 | 8 | [Configurações](CONFIG.md) | Ajustes de firmware, calibração, NVS e atualização do banco de dados | Avançado |
 | 9 | [Desenvolvimento](DEVELOP.md) | Arquitetura do código, estrutura do banco de dados e contribuição | Desenvolvedores |
-| 10 | [FAQ](FAQ.md) | Perguntas frequentes sobre uso e operação | Todos |
-| 11 | [Resolução de Problemas](TROUBLESHOOTING.md) | Guia de troubleshooting e diagnóstico de problemas | Todos |
+| 10 | [Changelog](CHANGELOG.md) | Histórico de versões e mudanças importantes do projeto | Todos |
+| 11 | [Roadmap](ROADMAP.md) | Planejamento de funcionalidades futuras do projeto | Todos |
+| 12 | [Contribuição](CONTRIBUTING.md) | Guia de como contribuir com o projeto | Desenvolvedores |
+| 13 | [Teste](TESTING.md) | Guia de como testar o equipamento após montagem | Usuários |
+| 14 | [FAQ](FAQ.md) | Perguntas frecuentes sobre uso e operação | Todos |
+| 15 | [Resolução de Problemas](TROUBLESHOOTING.md) | Guia de troubleshooting e diagnóstico de problemas | Todos |
 
 ---
 
@@ -43,11 +47,25 @@ Bem-vindo ao centro de documentação do **Component Tester PRO v3.0**. Este dir
 
 ## Avisos de Segurança
 
-> **PERIGO:** Este projeto envolve medições em tensão de rede elétrica (110V/220V). Sempre tome precauções adequadas e_NON_manipule o circuito enquanto estiver energizado.
+> **PERIGO:** Este projeto envolve medições em tensão de rede elétrica (110V/220V). Sempre tome precauções adequadas e **NÃO** manipule o circuito enquanto estiver energizado.
 
 > **ATENÇÃO:** Use luvas isolantes e ferramentas adequadas ao trabalhar com tensões superiores a 50V. O projeto inclui sistema de alertas, mas a segurança pessoal é responsabilidade do operador.
 
-> **IMPORTANTE:** Sempre verifique as conexões antes de energizar o circuito. Erros de fiação podem dañar componentes e representar risco de choque elétrico.
+> **IMPORTANTE:** Sempre verifique as conexões antes de energizar o circuito. Erros de fiação podem danificar componentes e representar risco de choque elétrico.
+
+---
+
+## Novos Arquivos Adicionados
+
+Esta seção foi criada para documentar as novas funcionalidades e melhorias introduzidas no projeto:
+
+| Arquivo | Descrição |
+|:---|:---|
+| [CHANGELOG.md](CHANGELOG.md) | Histórico completo de versões e mudanças |
+| [ROADMAP.md](ROADMAP.md) | Planejamento de funcionalidades futuras |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Guia para contribuidores |
+| [TESTING.md](TESTING.md) | Guia de validação pós-montagem |
+| [LICENSE.md](LICENSE.md) | Licença MIT e termos de uso |
 
 ---
 

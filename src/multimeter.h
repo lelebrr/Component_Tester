@@ -1,5 +1,5 @@
 // ============================================================================
-// Component Tester PRO v3.0 — Multímetro AC/DC com True RMS
+// Sondvolt v3.x — Multímetro AC/DC com True RMS
 // Descrição: Sistema completo de medição elétrica com ZMPT101B e INA219
 // Versão: CYD Edition para ESP32-2432S028R
 // ============================================================================
