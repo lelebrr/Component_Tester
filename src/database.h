@@ -1,93 +1,100 @@
 // ============================================================================
-// Component Tester PRO v3.0 — Database de Componentes (CYD Edition)
-// ============================================================================
-// Base de dados de componentes carregada do MicroSD Card.
-// Otimizado para ESP32: buffer maior, índice em RAM por categoria.
-// O SD Card da CYD usa barramento HSPI separado do TFT (VSPI).
+// Component Tester PRO v3.0 — Banco de Dados de Componentes
+// Descrição: Estrutura do banco de dados na RAM + SD + busca
 // ============================================================================
 #ifndef DATABASE_H
 #define DATABASE_H
 
-#include <Arduino.h>
-#include <SD.h>
-#include <SPI.h>
 #include <stdint.h>
 
 // ============================================================================
-// ESTRUTURA DE UM COMPONENTE NO BANCO DE DADOS
+// TIPOS DE COMPONENTES
 // ============================================================================
-struct ComponentDB {
-  char name[20];          // Nome/part number (ex: "BC547", "1N4148")
-  uint8_t category;       // Categoria (CAT_BJT_NPN, CAT_DIODE, etc.)
-  uint16_t value1;        // Valor primário (hFE, capacitância, resistência, Vf)
-  uint16_t min1;          // Valor mínimo aceito para match
-  uint16_t max1;          // Valor máximo aceito para match
-  uint16_t value2;        // Valor secundário (Vbe, Vz, etc.)
-  uint8_t pinout[3];      // Pinagem (BCE, ACK, etc.)
-  char description[50];   // Descrição breve
-  char common_use[50];    // Uso comum
-  uint8_t typical_esr;    // ESR típico (capacitores)
+enum ComponentType {
+    COMP_RESISTOR    = 0,
+    COMP_CAPACITOR   = 1,
+    COMP_ELECTROLYTIC = 2,
+    COMP_DIODE       = 3,
+    COMP_LED         = 4,
+    COMP_ZENER       = 5,
+    COMP_TRANSISTOR  = 6,
+    COMP_MOSFET      = 7,
+    COMP_INDUCTOR   = 8,
+    COMP_RELAY       = 9,
+    COMP_IC         = 10,
+    COMP_COIL       = 11,
+    COMP_UNKNOWN     = 99
 };
 
 // ============================================================================
-// CATEGORIAS DE COMPONENTES
+// JULGAMENTO DE COMPONENTE
 // ============================================================================
-#define CAT_BJT_NPN       1
-#define CAT_BJT_PNP       2
-#define CAT_MOSFET_N      3
-#define CAT_MOSFET_P      4
-#define CAT_DIODE         5
-#define CAT_ZENER         6
-#define CAT_SCHOTTKY      7
-#define CAT_LED           8
-#define CAT_CAPACITOR     9
-#define CAT_CAP_ELECTRO   100   // Categoria virtual para ícone
-#define CAT_RESISTOR      10
-#define CAT_INDUCTOR      11
-#define CAT_OPTOCOUPLER   12
-#define CAT_CRYSTAL       13
-#define CAT_POTENTIOMETER 14
-#define CAT_FUSE          15
-#define CAT_VARISTOR      16
-#define CAT_NTC           17
-#define CAT_TRIAC         18
-#define CAT_SCR           19
-#define CAT_REGULATOR     20
-#define CAT_RELAY         21
-#define CAT_SENSOR        22
-#define CAT_OTHER         23
-#define CAT_COUNT         24    // Total de categorias
-
-// ============================================================================
-// ÍNDICE EM RAM (otimização para ESP32)
-// ============================================================================
-// Armazena o offset no arquivo e o número de entradas por categoria.
-// Permite seek direto para a seção relevante do CSV.
-struct CategoryIndex {
-  uint32_t fileOffset;    // Posição no arquivo onde a categoria começa
-  uint16_t count;         // Número de entradas dessa categoria
+enum ComponentStatus {
+    STATUS_GOOD     = 0,   // Bom
+    STATUS_SUSPECT = 1,   // Suspeito (marginal)
+    STATUS_BAD     = 2,   // Ruim
+    STATUS_NONE    = 3    // Sem identificação
 };
 
-extern CategoryIndex categoryIndex[CAT_COUNT];
-extern bool dbIndexLoaded;    // Flag: índice já foi construído
+// ============================================================================
+// ITEM DO BANCO DE DADOS
+// ============================================================================
+struct ComponentInfo {
+    ComponentType type;
+    char name[20];
+    char description[40];
+    char unit[8];
+    float minGood;      // Mínimo para status BOM
+    float maxGood;     // Máximo para status BOM
+    float minSuspect;   // Margem inferior para SUSPEITO
+    float maxSuspect;   // Margem superior para SUSPEITO
+    ComponentStatus defaultStatus;
+};
 
 // ============================================================================
 // PROTÓTIPOS
 // ============================================================================
-// Inicializa o SD Card no barramento HSPI e constrói o índice em RAM
+
+// Inicialização do SD
 bool db_init_sd();
 
-// Constrói o índice de categorias a partir do CSV (chamado uma vez no boot)
+// Carregar índice do banco de dados
 bool db_load_index();
 
-// Busca o melhor match para os valores medidos
-ComponentDB findBestMatch(uint8_t category, uint16_t measured_value1,
-                          uint16_t measured_value2, uint16_t measured_esr);
+// Adicionar item ao banco de dados na RAM
+int db_add(const ComponentInfo* info);
 
-// Imprime informações de um componente na Serial (debug)
-void printComponentInfo(const ComponentDB &comp, uint16_t measured, uint16_t esr);
+// Buscar por tipo
+const ComponentInfo* db_find_by_type(ComponentType type);
 
-// Retorna o nome legível de uma categoria
-const char* getCategoryName(uint8_t category);
+// Buscar por nome (parcial)
+int db_find_by_name(const char* name);
+
+// Obter resultado de julgamento
+ComponentStatus db_judge(ComponentType type, float value);
+
+// Obter string do status
+const char* db_status_string(ComponentStatus status);
+
+// Obter cor do status
+uint16_t db_status_color(ComponentStatus status);
+
+// Obter cor do componente
+uint16_t db_component_color(ComponentType type);
+
+// Contagem do banco
+int db_count();
+
+// Verificar se há banco carregado
+bool db_is_loaded();
+
+// Carregar banco padrão na RAM (fallback quando SD não está presente)
+void db_load_default();
+
+// ============================================================================
+// BANCO PADRÃO (hardcoded para quando SD não está disponível)
+// ============================================================================
+extern const ComponentInfo DB_DEFAULT[];
+extern const uint8_t DB_DEFAULT_COUNT;
 
 #endif // DATABASE_H

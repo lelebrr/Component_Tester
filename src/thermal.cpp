@@ -1,188 +1,178 @@
 // ============================================================================
-// Component Tester PRO v3.0 — Sonda Térmica DS18B20 (CYD Edition)
-// ============================================================================
-// Sensor DS18B20 conectado ao GPIO 4 via protocolo OneWire.
-// A lógica é idêntica ao Arduino Uno — o OneWire é totalmente compatível.
+// Component Tester PRO v3.0 — Sonda Térmica DS18B20 (Implementação)
 // ============================================================================
 
 #include "thermal.h"
-#include "buzzer.h"
-#include "config.h"
 #include "globals.h"
+#include "config.h"
+#include "buzzer.h"
 #include "leds.h"
-#include "utils.h"
-#include "drawings.h"
-#include "buttons.h"
-#include "menu.h"
-#include <TFT_eSPI.h>
+#include "graphics.h"
 #include <OneWire.h>
+#include <DallasTemperature.h>
 
-extern TFT_eSPI tft;
+// ============================================================================
+// INSTÂNCIAS
+// ============================================================================
+static OneWire oneWire(PIN_ONEWIRE);
+static DallasTemperature sensors(&oneWire);
+static DeviceAddress sensorAddress;
 
-// Objeto OneWire no pino da CYD
-OneWire oneWireBus(PIN_ONEWIRE);
-
-// Variáveis para controle da leitura
-unsigned long lastTempReadMillis = 0;
-const long tempReadInterval = 500; // Leitura a cada 500ms
+// Estados
+static float lastTempRead = 25.0f;
+static bool sensorFound = false;
+static unsigned long lastReadMs = 0;
+static bool alertActive = false;
+static unsigned long alertBeepMs = 0;
 
 // ============================================================================
 // INICIALIZAÇÃO
 // ============================================================================
 void thermal_init() {
-  pinMode(PIN_ONEWIRE, INPUT_PULLUP);
-  lastTempReadMillis = currentMillis;
-  currentTemperature = 25.0f;
-  LOG_SERIAL_F("Sonda termica: GPIO 4 (DS18B20)");
+    DBG_PRINTLN("[THERM] Procurando sensores DS18B20...");
+
+    sensors.begin();
+    sensorFound = sensors.getAddress(sensorAddress, 0);
+
+    if (!sensorFound) {
+        DBG_PRINTLN("[THERM] Sensor não encontrado!");
+        return;
+    }
+
+    sensors.setResolution(sensorAddress, 12); // 12-bit = 0.0625°C
+    sensors.setWaitForConversion(false);      // Não-bloqueante
+
+    DBG_PRINT("[THERM] Sensor encontrado: ");
+    for (int i = 0; i < 8; i++) {
+        DBG_PRINTF("%02X", sensorAddress[i]);
+    }
+    DBG_PRINTLN("");
+
+    // Primeira conversão
+    sensors.requestTemperatures();
+    lastReadMs = millis();
+
+    DBG_PRINTLN("[THERM] Sonda térmica pronta");
 }
 
 // ============================================================================
-// HANDLER (chamado no loop quando STATE_THERMAL_PROBE)
+// LEITURAS
+// ============================================================================
+float thermal_read() {
+    if (!sensorFound) return -999.0f;
+
+    sensors.requestTemperatures();
+    float temp = sensors.getTempC(sensorAddress);
+    lastTempRead = temp;
+    lastReadMs = millis();
+
+    return temp;
+}
+
+float thermal_read_async() {
+    if (!sensorFound) return lastTempRead;
+
+    unsigned long now = millis();
+    if (now - lastReadMs > 750) { // DS18B20 precisa de ~750ms para 12-bit
+        float temp = sensors.getTempC(sensorAddress);
+        if (temp != 85.0f && temp != -127.0f) { // Erros conhecidos do DS18B20
+            lastTempRead = temp;
+        }
+        sensors.requestTemperatures();
+        lastReadMs = now;
+    }
+
+    return lastTempRead;
+}
+
+float thermal_get_last() {
+    return lastTempRead;
+}
+
+// ============================================================================
+// ALERTAS
+// ============================================================================
+bool thermal_has_alert() {
+    return thermal_is_warning();
+}
+
+bool thermal_is_warning() {
+    return lastTempRead > TEMP_NORMAL_MAX;
+}
+
+bool thermal_is_critical() {
+    return lastTempRead > TEMP_WARNING;
+}
+
+// ============================================================================
+// UI — HANDLE
 // ============================================================================
 void thermal_handle() {
-  static bool firstRun = true;
-  if (firstRun) {
-    tft.fillScreen(UI_COLOR_BG);
-    draw_status_bar();
-    draw_modern_card("Sonda Termica", UI_COLOR_ACCENT);
-    firstRun = false;
-  }
+    float temp = thermal_read_async();
 
-  if (currentMillis - lastTempReadMillis >= tempReadInterval) {
-    lastTempReadMillis = currentMillis;
-    currentTemperature = read_temperature();
-    check_temperature_alerts(currentTemperature);
+    // Atualiza backlight
+    lastActivityMs = millis();
 
-    // Exibe a temperatura com estilo moderno
-    tft.fillRect(20, 80, 260, 100, UI_COLOR_BG);
-    tft.setCursor(30, 100);
-    tft.setTextSize(4);
+    // Desenha atualização
+    tft.fillRect(STATUS_BAR_HEIGHT, STATUS_BAR_HEIGHT + 30, 280, 160,
+                   UI_COLORS::BACKGROUND);
 
-    // Cor baseada na faixa de temperatura
-    if (currentTemperature < TEMP_NORMAL_THRESHOLD) {
-      tft.setTextColor(UI_COLOR_GREEN);
-    } else if (currentTemperature < TEMP_HOT_THRESHOLD) {
-      tft.setTextColor(UI_COLOR_ORANGE);
+    // Gauge de temperatura
+    int cx = 160, cy = 120, r = 60;
+    float pct = (temp - 20.0f) / 80.0f; // 20°C a 100°C
+    pct = constrain(pct, 0.0f, 1.0f);
+
+    uint16_t gaugeColor = (temp > TEMP_WARNING) ?
+                             UI_COLORS::DANGER :
+                             (temp > TEMP_NORMAL_MAX) ?
+                             UI_COLORS::WARNING :
+                             UI_COLORS::SUCCESS;
+
+    draw_gauge(cx, cy, r, temp, 20.0f, 100.0f, "C", gaugeColor,
+                 UI_COLORS::STATUS_BG);
+
+    // Texto de status
+    const char* statusText;
+    uint16_t statusColor;
+    if (temp > TEMP_WARNING) {
+        statusText = "CRITICO!";
+        statusColor = UI_COLORS::DANGER;
+    } else if (temp > TEMP_NORMAL_MAX) {
+        statusText = "QUENTE";
+        statusColor = UI_COLORS::WARNING;
     } else {
-      tft.setTextColor(UI_COLOR_RED);
+        statusText = "NORMAL";
+        statusColor = UI_COLORS::SUCCESS;
     }
 
-    fprint(tft, currentTemperature, 1);
+    tft.setTextColor(statusColor);
     tft.setTextSize(2);
-    tft.print(F(" C"));
+    tft.setTextDatum(TC_DATUM);
+    tft.setCursor(cx, cy + 75);
+    tft.print(statusText);
+    tft.setTextDatum(TL_DATUM);
 
-    // Status textual
-    tft.setTextSize(1);
-    tft.setCursor(30, 140);
-    if (currentTemperature < TEMP_NORMAL_THRESHOLD) {
-      tft.setTextColor(UI_COLOR_GREEN);
-      tft.println(F("Status: OPERACAO NORMAL"));
-    } else if (currentTemperature < TEMP_HOT_THRESHOLD) {
-      tft.setTextColor(UI_COLOR_ORANGE);
-      tft.println(F("Status: AQUECIMENTO"));
-    } else {
-      tft.setTextColor(UI_COLOR_RED);
-      tft.println(F("Status: PERIGO TERMICO!"));
+    // Alerta sonoro periódico
+    unsigned long now = millis();
+    if (temp > TEMP_WARNING && now - alertBeepMs > 3000) {
+        buzzer_alert();
+        alertBeepMs = now;
     }
-
-    // Barra visual de temperatura (0-150°C)
-    int barMaxW = 260;
-    int barW = (int)(currentTemperature * barMaxW / 150.0f);
-    if (barW > barMaxW) barW = barMaxW;
-    if (barW < 0) barW = 0;
-
-    tft.drawRect(28, 165, barMaxW + 4, 14, UI_COLOR_GREY);
-    uint16_t barColor = (currentTemperature < TEMP_NORMAL_THRESHOLD) ? UI_COLOR_GREEN :
-                         (currentTemperature < TEMP_HOT_THRESHOLD) ? UI_COLOR_ORANGE : UI_COLOR_RED;
-    tft.fillRect(30, 167, barW, 10, barColor);
-
-    // Labels da barra
-    tft.setCursor(30, 182);
-    tft.setTextColor(UI_COLOR_GREY);
-    tft.setTextSize(1);
-    tft.print(F("0"));
-    tft.setCursor(135, 182);
-    tft.print(F("70"));
-    tft.setCursor(210, 182);
-    tft.print(F("110"));
-    tft.setCursor(270, 182);
-    tft.print(F("150C"));
-
-    // Sensor info
-    tft.setCursor(30, 200);
-    tft.setTextColor(UI_COLOR_GREY);
-    tft.print(F("Sensor: DS18B20 | GPIO "));
-    tft.print(PIN_ONEWIRE);
-  }
-
-  buttons_update();
-  if (isBackPressed()) {
-    firstRun = true;
-    currentAppState = STATE_MENU;
-    draw_menu();
-  }
 }
 
-// ============================================================================
-// LEITURA DO DS18B20 (protocolo OneWire direto)
-// ============================================================================
-float read_temperature() {
-  static float lastTemp = 25.0f;
-  byte data[2];
-
-  if (!oneWireBus.reset()) return lastTemp;
-  oneWireBus.write(0xCC); // Skip ROM (apenas 1 sensor)
-  oneWireBus.write(0x44); // Iniciar conversão
-
-  // Delay para conversão (750ms para 12-bit, mas usamos delay menor para UI fluida)
-  delay(100);
-
-  oneWireBus.reset();
-  oneWireBus.write(0xCC);
-  oneWireBus.write(0xBE); // Ler scratchpad
-  data[0] = oneWireBus.read();
-  data[1] = oneWireBus.read();
-
-  float result = (float)((data[1] << 8) | data[0]) / 16.0f;
-
-  // Validação de range (-50°C a +150°C)
-  if (result > -50.0f && result < 150.0f) {
-    lastTemp = result;
-    return result;
-  }
-  return lastTemp;
+void thermal_alert_beep() {
+    buzzer_alert();
 }
 
-// ============================================================================
-// ALERTAS DE TEMPERATURA
-// ============================================================================
-void check_temperature_alerts(float temp) {
-  static unsigned long lastAlertMillis = 0;
-  static unsigned long beepInterval = 2000;
+void thermal_draw() {
+    tft.fillScreen(UI_COLORS::BACKGROUND);
+    draw_status_bar();
+    thermal_handle();
+    draw_footer();
+}
 
-  if (temp >= TEMP_DANGER_THRESHOLD) {
-    set_red_led(true);
-    beepInterval = 200;
-    if (currentMillis - lastAlertMillis >= beepInterval) {
-      lastAlertMillis = currentMillis;
-      play_beep(150);
+void thermal_set_resolution(uint8_t resolution) {
+    if (sensorFound) {
+        sensors.setResolution(sensorAddress, resolution);
     }
-  } else if (temp >= TEMP_HOT_THRESHOLD) {
-    flash_red_led_fast();
-    beepInterval = 500;
-    if (currentMillis - lastAlertMillis >= beepInterval) {
-      lastAlertMillis = currentMillis;
-      play_beep(100);
-    }
-  } else if (temp >= TEMP_NORMAL_THRESHOLD) {
-    set_red_led(false);
-    beepInterval = 1000;
-    if (currentMillis - lastAlertMillis >= beepInterval) {
-      lastAlertMillis = currentMillis;
-      play_beep(50);
-    }
-  } else {
-    set_red_led(false);
-    stop_beep();
-  }
 }

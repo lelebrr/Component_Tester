@@ -1,352 +1,704 @@
 // ============================================================================
 // Component Tester PRO v3.0 — Main (CYD Edition)
-// ============================================================================
 // Plataforma: ESP32-2432S028R (Cheap Yellow Display)
-// Display: TFT 2.8" ILI9341 320x240 (integrado, driver TFT_eSPI)
-// Touch: XPT2046 resistivo (integrado)
-// SD Card: MicroSD no HSPI (separado do TFT)
-// Persistência: NVS via Preferences
+// Descrição: Estrutura principal com FreeRTOS
+// Displays: Adafruit ILI9341 + Adafruit GFX
+// Touch: XPT2046
 // ============================================================================
 
+#include "config.h"
+#include <Adafruit_GFX.h>
+#include <Adafruit_ILI9341.h>
+#include <XPT2046_Touchscreen.h>
+#include <SD.h>
+#include <SPI.h>
+#include <Preferences.h>
+
+// ============================================================================
+// INCLUDES DOS MÓDULOS DO PROJETO
+// ============================================================================
 #include "globals.h"
 #include "buttons.h"
 #include "buzzer.h"
 #include "leds.h"
 #include "menu.h"
-#include "multimeter.h"
 #include "measurements.h"
+#include "multimeter.h"
 #include "thermal.h"
 #include "database.h"
-#include <TFT_eSPI.h>
-#include <Preferences.h>
-#include <Arduino.h>
+#include "logger.h"
+#include "utils.h"
+#include "graphics.h"
 
 // ============================================================================
-// INSTÂNCIAS GLOBAIS
+// INSTÂNCIAS GLOBAIS DE HARDWARE
 // ============================================================================
-// O TFT_eSPI é configurado via build_flags no platformio.ini
-TFT_eSPI tft = TFT_eSPI();
+// Display TFT ILI9341 — usa HSPI (MOSI=23, MISO=19, SCLK=18)
+// Construtor: Adafruit_ILI9341(CS, DC, RST=-1)
+Adafruit_ILI9341 tft(PIN_TFT_CS, PIN_TFT_DC, PIN_TFT_RST);
 
-// NVS (Non-Volatile Storage)
-Preferences preferences;
+// Touchscreen XPT2046 — usa SPI software (bitbang)
+XPT2046_Touchscreen ts(PIN_TOUCH_CS, PIN_TOUCH_IRQ);
+#define TS_CS PIN_TOUCH_CS
 
-// ============================================================================
-// VARIÁVEIS GLOBAIS (definições das extern em globals.h)
-// ============================================================================
-enum AppState currentAppState = STATE_SPLASH;
-unsigned long previousMillis = 0;
-unsigned long currentMillis = 0;
-bool greenLedState = false;
-bool redLedState = false;
-float currentTemperature = 0.0;
-int currentMenuItem = 0;
-int totalMenuItems = 0;
-
-MeasurementHistory measurementHistory[HISTORY_SIZE];
-int historyIndex = 0;
-int historyCount = 0;
-
-Settings deviceSettings = {
-  0.0f,           // offset1
-  0.0f,           // offset2
-  false,          // darkMode
-  false,          // silentMode
-  DEFAULT_TIMEOUT_MS, // timeoutDuration
-  0,              // totalMeasurements
-  0,              // faultyMeasurements
-  DEFAULT_BACKLIGHT,  // backlight
-  ZMPT_SCALE_FACTOR,  // zmptScaleFactor
-  {0, 0, 0, 0, 0}     // touchCalibration (zeros = sem calibração)
-};
+// NVS (Non-Volatile Storage — flash interna)
+Preferences nvs;
 
 // ============================================================================
-// PERSISTÊNCIA VIA NVS (Preferences)
+// FILAS DO FREE RTOS (comunicação entre tasks)
 // ============================================================================
-// O ESP32 usa o NVS (Flash interna particionada).
-// Muito mais robusto e com endurance de ~100k ciclos por chave.
+QueueHandle_t measurementQueue;
+QueueHandle_t displayQueue;
+QueueHandle_t sdQueue;
+
+// ============================================================================
+//Handles das tasks
+// ============================================================================
+TaskHandle_t xMeasurementTaskHandle = NULL;
+TaskHandle_t xThermalTaskHandle = NULL;
+TaskHandle_t xSDTaskHandle = NULL;
+
+// ============================================================================
+// VARIÁVEIS GLOBAIS DO SISTEMA
+// ============================================================================
+// Estado atual da máquina de estados
+volatile AppState currentAppState = STATE_SPLASH;
+volatile AppState previousAppState = STATE_SPLASH;
+
+// Controle de tempo
+unsigned long lastActivityMs = 0;      // Última interação do usuário
+unsigned long backlightOffTimeMs = 0;  // Quando desligar o backlight
+bool backlightOn = true;
+
+// Medições atuais
+float lastResistance = 0.0f;
+float lastCapacitance = 0.0f;
+float lastInductance = 0.0f;
+float lastVoltage = 0.0f;
+float lastCurrent = 0.0f;
+float lastTemperature = 25.0f;
+
+// Estatísticas
+uint32_t totalMeasurements = 0;
+uint32_t goodMeasurements = 0;
+uint32_t badMeasurements = 0;
+
+// Calibração dos probes
+float probeOffsetResistance = 0.0f;
+float probeOffsetCapacitance = 0.0f;
+
+// Banco de dados na RAM
+ComponentDatabase componentDB;
+
+// SD Card
+bool sdCardPresent = false;
+bool sdCardError = false;
+
+// ============================================================================
+// PROTÓTIPOS
+// ============================================================================
+void splashScreen();
+void initHardware();
+void initFreeRTOS();
+void powerManagement();
+void enterSleep();
+void wakeUp();
+
+// ============================================================================
+// FUNÇÕES AUXILIARES
+// ============================================================================
+
+// Reinicia o ESP32 de forma controlada
+void systemReset() {
+    DBG_PRINTLN("[SYS] Reiniciando...");
+    delay(100);
+    ESP.restart();
+}
+
+// Reinicia apenas a UI (sem reset completo)
+void softReset() {
+    DBG_PRINTLN("[SYS] Soft Reset da UI...");
+    currentAppState = STATE_MENU;
+    menuRefresh();
+}
+
+// ============================================================================
+// BACKLIGHT (controle PWM via LEDC)
+// ============================================================================
+
+void backlight_init() {
+    // Configura canal LEDC para o backlight
+    ledcSetup(LEDC_CH_BACKLIGHT, LEDC_FREQ_BL, LEDC_TIMER_BIT);
+    ledcAttachPin(PIN_TFT_BL, LEDC_CH_BACKLIGHT);
+
+    // Define duty cycle inicial
+    uint8_t defaultBrightness = (uint8_t)((float)255 * deviceSettings.backlight / 255.0f);
+    ledcWrite(LEDC_CH_BACKLIGHT, defaultBrightness);
+
+    DBG_PRINTF("[BL] Inicializado com brilho: %d%%\n",
+               (int)(deviceSettings.backlight * 100 / 255));
+}
+
+void backlight_set(uint8_t level) {
+    // level: 0-255
+    ledcWrite(LEDC_CH_BACKLIGHT, level);
+    lastActivityMs = millis();
+    backlightOn = (level > 10);
+}
+
+void backlight_on() {
+    backlight_set(deviceSettings.backlight);
+}
+
+void backlight_off() {
+    backlight_set(0);
+    backlightOn = false;
+}
+
+void backlight_toggle() {
+    if (backlightOn) {
+        backlight_off();
+    } else {
+        backlight_on();
+    }
+}
+
+void backlight_fadeTo(uint8_t targetLevel, uint16_t durationMs) {
+    uint8_t currentLevel = ledcRead(LEDC_CH_BACKLIGHT);
+    if (currentLevel == targetLevel) return;
+
+    unsigned long startMs = millis();
+    unsigned long steps = 30;
+    unsigned long stepDelay = durationMs / steps;
+
+    for (unsigned long i = 1; i <= steps; i++) {
+        uint8_t newLevel = map(i, 1, steps, currentLevel, targetLevel);
+        ledcWrite(LEDC_CH_BACKLIGHT, newLevel);
+        delay(stepDelay);
+    }
+    ledcWrite(LEDC_CH_BACKLIGHT, targetLevel);
+    lastActivityMs = millis();
+    backlightOn = (targetLevel > 10);
+}
+
+// ============================================================================
+// PERSISTÊNCIA (NVS)
+// ============================================================================
 
 void loadSettings() {
-  preferences.begin("ct_settings", true); // Modo somente-leitura
+    nvs.begin("ct_settings", true); // read-only
 
-  deviceSettings.offset1           = preferences.getFloat("offset1", 0.0f);
-  deviceSettings.offset2           = preferences.getFloat("offset2", 0.0f);
-  deviceSettings.darkMode          = preferences.getBool("darkMode", false);
-  deviceSettings.silentMode        = preferences.getBool("silentMode", false);
-  deviceSettings.timeoutDuration   = preferences.getULong("timeout", DEFAULT_TIMEOUT_MS);
-  deviceSettings.totalMeasurements = preferences.getULong("totalMeas", 0);
-  deviceSettings.faultyMeasurements= preferences.getULong("faultyMeas", 0);
-  deviceSettings.backlight         = preferences.getUChar("backlight", DEFAULT_BACKLIGHT);
-  deviceSettings.zmptScaleFactor   = preferences.getFloat("zmptScale", ZMPT_SCALE_FACTOR);
-  
-  // Carregar blob de calibração do touch
-  preferences.getBytes("touchCal", deviceSettings.touchCalibration, sizeof(deviceSettings.touchCalibration));
+    deviceSettings.backlight          = nvs.getUChar("backlight", LEDC_DUTY_DEFAULT);
+    deviceSettings.darkMode           = nvs.getBool("darkMode", false);
+    deviceSettings.silentMode          = nvs.getBool("silentMode", false);
+    deviceSettings.autoSleep           = nvs.getBool("autoSleep", true);
+    deviceSettings.autoSleepMs         = nvs.getULong("autoSleepMs", AUTO_SLEEP_MS);
+    deviceSettings.soundEnabled        = nvs.getBool("sound", true);
+    deviceSettings.calibrated          = nvs.getBool("calibrated", false);
 
-  preferences.end();
+    probeOffsetResistance = nvs.getFloat("offsetRes", 0.0f);
+    probeOffsetCapacitance = nvs.getFloat("offsetCap", 0.0f);
 
-  Serial.println(F("Settings carregados do NVS"));
+    totalMeasurements = nvs.getULong("totalMeas", 0);
+    goodMeasurements = nvs.getULong("goodMeas", 0);
+    badMeasurements = nvs.getULong("badMeas", 0);
+
+    nvs.end();
+
+    DBG_PRINTLN("[NVS] Configurações carregadas");
 }
 
 void saveSettings() {
-  preferences.begin("ct_settings", false); // Modo leitura/escrita
+    nvs.begin("ct_settings", false); // read-write
 
-  preferences.putFloat("offset1", deviceSettings.offset1);
-  preferences.putFloat("offset2", deviceSettings.offset2);
-  preferences.putBool("darkMode", deviceSettings.darkMode);
-  preferences.putBool("silentMode", deviceSettings.silentMode);
-  preferences.putULong("timeout", deviceSettings.timeoutDuration);
-  preferences.putULong("totalMeas", deviceSettings.totalMeasurements);
-  preferences.putULong("faultyMeas", deviceSettings.faultyMeasurements);
-  preferences.putUChar("backlight", deviceSettings.backlight);
-  preferences.putFloat("zmptScale", deviceSettings.zmptScaleFactor);
-  
-  // Salvar blob de calibração do touch
-  preferences.putBytes("touchCal", deviceSettings.touchCalibration, sizeof(deviceSettings.touchCalibration));
+    nvs.putUChar("backlight", deviceSettings.backlight);
+    nvs.putBool("darkMode", deviceSettings.darkMode);
+    nvs.putBool("silentMode", deviceSettings.silentMode);
+    nvs.putBool("autoSleep", deviceSettings.autoSleep);
+    nvs.putULong("autoSleepMs", deviceSettings.autoSleepMs);
+    nvs.putBool("sound", deviceSettings.soundEnabled);
+    nvs.putBool("calibrated", deviceSettings.calibrated);
 
-  preferences.end();
+    nvs.putFloat("offsetRes", probeOffsetResistance);
+    nvs.putFloat("offsetCap", probeOffsetCapacitance);
+
+    nvs.putULong("totalMeas", totalMeasurements);
+    nvs.putULong("goodMeas", goodMeasurements);
+    nvs.putULong("badMeas", badMeasurements);
+
+    nvs.end();
+
+    DBG_PRINTLN("[NVS] Configurações salvas");
 }
 
 // ============================================================================
-// HISTÓRICO DE MEDIÇÕES
+// SD CARD
 // ============================================================================
-void addToHistory(const char* name, float value, float temp, bool isGood) {
-  strncpy(measurementHistory[historyIndex].name, name, MAX_MEASUREMENT_NAME - 1);
-  measurementHistory[historyIndex].name[MAX_MEASUREMENT_NAME - 1] = '\0';
-  measurementHistory[historyIndex].value = value;
-  measurementHistory[historyIndex].temp = temp;
-  measurementHistory[historyIndex].isGood = isGood;
-  historyIndex = (historyIndex + 1) % HISTORY_SIZE;
-  if (historyCount < HISTORY_SIZE) historyCount++;
 
-  deviceSettings.totalMeasurements++;
-  if (!isGood) deviceSettings.faultyMeasurements++;
-  saveSettings();
+bool sd_init() {
+    SPI.begin(PIN_SD_SCK, PIN_SD_MISO, PIN_SD_MOSI, PIN_SD_CS);
+
+    if (!SD.begin(PIN_SD_CS, SPI, SD_SPI_SPEED)) {
+        DBG_PRINTLN("[SD] Falha ao inicializar cartão SD");
+        sdCardPresent = false;
+        return false;
+    }
+
+    uint8_t cardType = SD.cardType();
+    if (cardType == CARD_NONE) {
+        DBG_PRINTLN("[SD] Sem cartão SD detectado");
+        sdCardPresent = false;
+        return false;
+    }
+
+    sdCardPresent = true;
+    DBG_PRINTF("[SD] Cartão SD presente (tipo: %d)\n", cardType);
+    return true;
+}
+
+bool sd_writeLog(const char* line) {
+    if (!sdCardPresent) return false;
+
+    File f = SD.open(LOG_FILE_PATH, FILE_APPEND);
+    if (!f) {
+        DBG_PRINTLN("[SD] Erro ao abrir arquivo de log");
+        return false;
+    }
+
+    size_t written = f.println(line);
+    f.close();
+    return written > 0;
+}
+
+bool sd_loadDatabase() {
+    if (!sdCardPresent) return false;
+
+    File f = SD.open(DB_COMPONENTS_PATH, FILE_READ);
+    if (!f) {
+        DBG_PRINTLN("[SD] Banco de dados não encontrado no SD");
+        return false;
+    }
+
+    int count = 0;
+    while (f.available() && count < MAX_DB_COMPONENTS) {
+        String line = f.readStringUntil('\n');
+        line.trim();
+        if (line.length() == 0) continue;
+
+        int p1 = line.indexOf(',');
+        int p2 = line.indexOf(',', p1 + 1);
+        int p3 = line.indexOf(',', p2 + 1);
+        int p4 = line.indexOf(',', p3 + 1);
+
+        if (p1 > 0 && p2 > p1 && p3 > p2 && p4 > p3) {
+            componentDB.items[count].type = line.substring(0, p1).toInt();
+            strncpy(componentDB.items[count].name,
+                    line.substring(p1 + 1, p2).c_str(), 19);
+            componentDB.items[count].name[19] = '\0';
+            strncpy(componentDB.items[count].unit,
+                    line.substring(p2 + 1, p3).c_str(), 7);
+            componentDB.items[count].unit[7] = '\0';
+            componentDB.items[count].minGood = line.substring(p3 + 1, p4).toFloat();
+            componentDB.items[count].maxGood = line.substring(p4 + 1).toFloat();
+            count++;
+        }
+    }
+    f.close();
+    componentDB.count = count;
+    DBG_PRINTF("[SD] Carregados %d componentes\n", count);
+    return true;
 }
 
 // ============================================================================
-// CONTROLE DO BACKLIGHT (PWM via LEDC)
+// INICIALIZAÇÃO DO HARDWARE
 // ============================================================================
-static void backlight_init() {
-  // Configura canal LEDC para o backlight do TFT
-  ledcAttach(PIN_TFT_BL, LEDC_FREQ_BL, LEDC_RESOLUTION);
-  ledcWrite(PIN_TFT_BL, deviceSettings.backlight);
-  Serial.print(F("Backlight: "));
-  Serial.println(deviceSettings.backlight);
+
+void initHardware() {
+    DBG_PRINTLN("");
+    DBG_PRINTLN(F("=========================================="));
+    DBG_PRINTLN(F("  CT PRO v3.0 — CYD Edition"));
+    DBG_PRINTLN(F("  " FW_BOARD));
+    DBG_PRINTLN(F("  Build: " __DATE__ " " __TIME__));
+    DBG_PRINTLN(F("=========================================="));
+    DBG_PRINTLN("");
+
+    // --- LEDs ---
+    pinMode(PIN_RGB_LED, OUTPUT);
+    digitalWrite(PIN_RGB_LED, LOW);
+
+    pinMode(PIN_LED_GREEN, OUTPUT);
+    pinMode(PIN_LED_RED, OUTPUT);
+    digitalWrite(PIN_LED_GREEN, LOW);
+    digitalWrite(PIN_LED_RED, LOW);
+
+    // --- Buzzer ---
+    buzzer_init();
+
+    // --- Backlight ---
+    backlight_init();
+
+    // --- Display TFT (usa HSPI: MOSI=23, MISO=19, SCLK=18) ---
+    SPI.begin(PIN_TFT_SCK, PIN_TFT_MISO, PIN_TFT_MOSI, PIN_TFT_CS);
+    tft.begin();
+    tft.setRotation(TFT_ROTATION);
+    tft.fillScreen(UI_COLORS::BACKGROUND);
+
+    DBG_PRINTLN("[TFT] Display ILI9341 inicializado");
+
+    // --- Touchscreen ---
+    ts.begin();
+    ts.setRotation(1); // paisagem
+    DBG_PRINTLN("[TOUCH] XPT2046 inicializado");
+
+    // --- SD Card ---
+    sd_init();
+    sd_loadDatabase();
+
+    // --- Load Settings ---
+    loadSettings();
+
+    // --- Sensores ---
+    thermal_init();
+    multimeter_init();
+
+    // --- LED RGB — sinal de boot OK ---
+    led_set_rgb(0, 50, 0); // verde
+    delay(300);
+    led_set_rgb(0, 0, 0);
 }
 
-static void backlight_set(uint8_t level) {
-  ledcWrite(PIN_TFT_BL, level);
+// ============================================================================
+// FREE RTOS — TASKS
+// ============================================================================
+
+void task_measurement(void* pvParameters) {
+    (void)pvParameters;
+    MeasurementResult result;
+
+    DBG_PRINTLN("[TASK] Task de medição iniciada");
+
+    for (;;) {
+        if (xQueueReceive(measurementQueue, &result, portMAX_DELAY) == pdTRUE) {
+            lastResistance = result.resistance;
+            lastCapacitance = result.capacitance;
+            lastInductance = result.inductance;
+        }
+        taskYIELD();
+    }
+}
+
+void task_thermal(void* pvParameters) {
+    (void)pvParameters;
+    float temperature;
+
+    DBG_PRINTLN("[TASK] Task térmica iniciada");
+
+    for (;;) {
+        temperature = thermal_read();
+        lastTemperature = temperature;
+
+        if (temperature > TEMP_WARNING) {
+            // Disparar alerta
+            DisplayMessage msg;
+            msg.type = MSG_TEMPERATURE;
+            msg.value = temperature;
+            xQueueSend(displayQueue, &msg, 0);
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(2000));
+    }
+}
+
+void task_sd_logging(void* pvParameters) {
+    (void)pvParameters;
+    LogEntry entry;
+
+    DBG_PRINTLN("[TASK] Task de logging SD iniciada");
+
+    for (;;) {
+        if (xQueueReceive(sdQueue, &entry, portMAX_DELAY) == pdTRUE) {
+            char line[128];
+            snprintf(line, sizeof(line), "%lu,%s,%.6f,%s",
+                     entry.timestamp,
+                     entry.componentName,
+                     entry.value,
+                     entry.status);
+            sd_writeLog(line);
+        }
+        taskYIELD();
+    }
+}
+
+void initFreeRTOS() {
+    // Criar filas
+    measurementQueue = xQueueCreate(4, sizeof(MeasurementResult));
+    displayQueue = xQueueCreate(8, sizeof(DisplayMessage));
+    sdQueue = xQueueCreate(16, sizeof(LogEntry));
+
+    if (measurementQueue == NULL || displayQueue == NULL || sdQueue == NULL) {
+        DBG_PRINTLN("[RTOS] ERRO ao criar filas");
+        return;
+    }
+
+    DBG_PRINTLN("[RTOS] Filas criadas com sucesso");
+
+    // Tarefa de medição (prioridade média, Core 1)
+    xTaskCreatePinnedToCore(
+        task_measurement,
+        "MeasTask",
+        TASK_STACK_MEASURE,
+        NULL,
+        TASK_PRIORITY_MEDIUM,
+        &xMeasurementTaskHandle,
+        1);
+
+    // Tarefa térmica (prioridade baixa, Core 1)
+    xTaskCreatePinnedToCore(
+        task_thermal,
+        "ThermTask",
+        TASK_STACK_THERMAL,
+        NULL,
+        TASK_PRIORITY_LOW,
+        &xThermalTaskHandle,
+        1);
+
+    // Tarefa de logging SD (prioridade baixa, Core 0)
+    xTaskCreatePinnedToCore(
+        task_sd_logging,
+        "SDTask",
+        TASK_STACK_SD,
+        NULL,
+        TASK_PRIORITY_LOW,
+        &xSDTaskHandle,
+        0);
+
+    DBG_PRINTLN("[RTOS] Tasks iniciadas");
 }
 
 // ============================================================================
-// SETUP
+// SPLASH SCREEN
 // ============================================================================
-void setup() {
-  // --- Serial ---
-  Serial.begin(SERIAL_BAUD);
-  Serial.println(F(""));
-  Serial.println(F("========================================="));
-  Serial.println(F("  CT PRO v3.0 — CYD Edition"));
-  Serial.println(F("  ESP32-2432S028R (Cheap Yellow Display)"));
-  Serial.println(F("========================================="));
 
-  // --- TFT Display ---
-  tft.init();
-  tft.setRotation(TFT_ROTATION);
-  tft.fillScreen(UI_COLOR_BG);
+void splashScreen() {
+    tft.fillScreen(UI_COLORS::SPLASH_BG);
 
-  // --- Backlight ---
-  backlight_init();
+    // --- Barra superior decorativa ---
+    tft.fillRect(0, 0, 320, 4, UI_COLORS::PRIMARY);
 
-  // --- LEDs ---
-  pinMode(PIN_LED_GREEN, OUTPUT);
-  pinMode(PIN_LED_RED, OUTPUT);
-  digitalWrite(PIN_LED_GREEN, LOW);
-  digitalWrite(PIN_LED_RED, LOW);
+    // --- Logo "CT PRO" com moldura ---
+    // Moldura externa (drawRect arredondado simula uma card)
+    tft.drawRoundRect(70, 55, 180, 65, 12, UI_COLORS::PRIMARY);
+    tft.drawRoundRect(72, 57, 176, 61, 10, UI_COLORS::SPLASH_BG);
 
-  // --- Buzzer ---
-  buzzer_init();
+    // Texto principal
+    tft.setTextColor(UI_COLORS::PRIMARY);
+    tft.setTextSize(3);
+    tft.setCursor(95, 75);
+    tft.print(F("CT PRO"));
 
-  // --- Botões e Touch ---
-  buttons_init();
+    // Versão
+    tft.setTextColor(UI_COLORS::TEXT);
+    tft.setTextSize(2);
+    tft.setCursor(110, 100);
+    tft.print(F("v" FW_VERSION));
 
-  // --- ADC ---
-  analogReadResolution(ADC_RESOLUTION); // 12 bits (0-4095)
-  // O ESP32 ADC tem não-linearidade natural, mas funciona bem para nossos propósitos
-
-  // =========================================================================
-  // SPLASH SCREEN v3.0 — CYD Edition (com barra de progresso animada)
-  // =========================================================================
-  tft.fillScreen(UI_COLOR_BG);
-
-  // Logo CT PRO com efeito de brilho expansivo
-  for (int i = 0; i < 5; i++) {
-    tft.drawRoundRect(80 - i, 50 - i, 160 + i * 2, 60 + i * 2, 10,
-                      0x0005 + i * 0x0100);
-    delay(40);
-  }
-
-  // Título principal
-  tft.setTextColor(UI_COLOR_ACCENT);
-  tft.setTextSize(4);
-  tft.setCursor(90, 65);
-  tft.print(F("CT PRO"));
-
-  // Subtítulo
-  tft.setTextSize(1);
-  tft.setTextColor(UI_COLOR_TEXT);
-  tft.setCursor(85, 108);
-  tft.print(F("CYD Edition v3.0 (ESP32)"));
-
-  // Info da placa
-  tft.setCursor(75, 125);
-  tft.setTextColor(UI_COLOR_GREY);
-  tft.print(F("ESP32-WROOM-32 | 240MHz | 520KB"));
-
-  // --- Barra de Progresso Animada ---
-  int barW = 220;
-  int barH = 12;
-  int barX = (tft.width() - barW) / 2;
-  int barY = 175;
-
-  tft.drawRoundRect(barX - 2, barY - 2, barW + 4, barH + 4, 4, UI_COLOR_HILIGHT);
-
-  for (int i = 0; i <= 100; i += 2) {
-    int currentW = (barW * i) / 100;
-    tft.fillRoundRect(barX, barY, currentW, barH, 2, UI_COLOR_ACCENT);
-
-    // Texto de progresso
-    tft.fillRect(barX + barW / 2 - 25, barY + 18, 70, 12, UI_COLOR_BG);
-    tft.setCursor(barX + barW / 2 - 15, barY + 18);
-    tft.setTextColor(UI_COLOR_TEXT);
+    // --- Subtítulo ---
     tft.setTextSize(1);
-    tft.print(i);
-    tft.print(F("%"));
+    tft.setTextColor(UI_COLORS::TEXT_DIM);
+    tft.setCursor(88, 138);
+    tft.print(FW_BOARD);
 
-    // Ações de inicialização em pontos específicos
-    if (i == 10) {
-      tft.setCursor(barX, barY + 32);
-      tft.setTextColor(UI_COLOR_GREY);
-      tft.print(F("Iniciando SD Card..."));
+    tft.setCursor(105, 152);
+    tft.print(F("CYD Edition"));
 
-      if (db_init_sd()) {
-        tft.setTextColor(UI_COLOR_GREEN);
-        tft.print(F(" OK"));
-      } else {
-        tft.setTextColor(UI_COLOR_RED);
-        tft.print(F(" ERRO"));
-      }
+    // --- Informações do sistema ---
+    tft.setTextColor(UI_COLORS::TEXT_HINT);
+    tft.setCursor(88, 172);
+    tft.print(F("240MHz | 520KB RAM"));
+
+    tft.setCursor(105, 185);
+    tft.print(F("ILI9341 2.8\""));
+
+    // --- Barra de progresso animada ---
+    int barW = 220;
+    int barH = 10;
+    int barX = (320 - barW) / 2;
+    int barY = 210;
+
+    tft.drawRoundRect(barX - 1, barY - 1, barW + 2, barH + 2, 4,
+                      UI_COLORS::BORDER);
+
+    for (int i = 0; i <= 100; i += 3) {
+        int filledW = (barW * i) / 100;
+        tft.fillRoundRect(barX, barY, filledW, barH, 3, UI_COLORS::PRIMARY);
+
+        tft.setTextColor(UI_COLORS::TEXT_HINT);
+        tft.setTextSize(1);
+        tft.setCursor(barX + barW / 2 - 10, barY + barH + 4);
+        char pct[8];
+        snprintf(pct, sizeof(pct), "%d%%", i);
+        tft.print(pct);
+
+        // Etapas de inicialização
+        if (i == 10) printInitStatus("Iniciando display...", UI_COLORS::TEXT_HINT);
+        if (i == 25) printInitStatus("Carregando SD...", UI_COLORS::TEXT_HINT);
+        if (i == 40) printInitStatus("Configurando sensores...", UI_COLORS::TEXT_HINT);
+        if (i == 55) printInitStatus("Carregando database...", UI_COLORS::TEXT_HINT);
+        if (i == 70) printInitStatus("Iniciando FreeRTOS...", UI_COLORS::TEXT_HINT);
+        if (i == 85) printInitStatus("Quase pronto...", UI_COLORS::TEXT_HINT);
+        if (i == 100) printInitStatus("Sistema pronto!", UI_COLORS::SUCCESS);
+
+        delay(20);
     }
 
-    if (i == 30) {
-      tft.fillRect(barX, barY + 32, 280, 12, UI_COLOR_BG);
-      tft.setCursor(barX, barY + 32);
-      tft.setTextColor(UI_COLOR_GREY);
-      tft.print(F("Carregando database..."));
+    delay(600);
+    buzzer_beep(200);
+}
 
-      if (db_load_index()) {
-        tft.setTextColor(UI_COLOR_GREEN);
-        tft.print(F(" OK"));
-      } else {
-        tft.setTextColor(UI_COLOR_ORANGE);
-        tft.print(F(" N/A"));
-      }
-    }
-
-    if (i == 50) {
-      tft.fillRect(barX, barY + 32, 280, 12, UI_COLOR_BG);
-      tft.setCursor(barX, barY + 32);
-      tft.setTextColor(UI_COLOR_GREY);
-      tft.print(F("Carregando settings..."));
-      loadSettings();
-      backlight_set(deviceSettings.backlight); // Aplicar backlight salvo
-      tft.setTextColor(UI_COLOR_GREEN);
-      tft.print(F(" OK"));
-    }
-
-    if (i == 70) {
-      tft.fillRect(barX, barY + 32, 280, 12, UI_COLOR_BG);
-      tft.setCursor(barX, barY + 32);
-      tft.setTextColor(UI_COLOR_GREY);
-      tft.print(F("Iniciando sensores..."));
-      thermal_init();
-      multimeter_init();
-      tft.setTextColor(UI_COLOR_GREEN);
-      tft.print(F(" OK"));
-    }
-
-    if (i == 90) {
-      tft.fillRect(barX, barY + 32, 280, 12, UI_COLOR_BG);
-      tft.setCursor(barX, barY + 32);
-      tft.setTextColor(UI_COLOR_ACCENT);
-      tft.print(F("Sistema pronto!"));
-    }
-
-    delay(15);
-  }
-
-  // Beep de boot finalizado
-  play_beep(200);
-  delay(400);
-
-  // --- Transição para o menu principal ---
-  currentAppState = STATE_MENU;
-  menu_init();
+void printInitStatus(const char* text, uint16_t color) {
+    static int lastY = 205;
+    tft.setTextColor(UI_COLORS::SPLASH_BG);
+    tft.setTextSize(1);
+    tft.setCursor(85, lastY);
+    tft.print(F("                                    "));
+    tft.setTextColor(color);
+    tft.setCursor(85, lastY);
+    tft.print(text);
+    lastY += 14;
 }
 
 // ============================================================================
-// LOOP PRINCIPAL
+// GERENCIAMENTO DE ENERGIA
 // ============================================================================
+
+void powerManagement() {
+    unsigned long now = millis();
+
+    if (!deviceSettings.autoSleep) {
+        lastActivityMs = now;
+        return;
+    }
+
+    // Detecta inatividade (tecla, toque)
+    if (now - lastActivityMs > deviceSettings.autoSleepMs) {
+        if (backlightOn) {
+            backlight_off();
+        }
+    }
+
+    // Desliga completamente após mais tempo
+    if (now - lastActivityMs > deviceSettings.autoSleepMs * 2) {
+        enterSleep();
+    }
+}
+
+void enterSleep() {
+    DBG_PRINTLN("[PWR] Entrando em modo sleep...");
+
+    backlight_off();
+    measurements_stop();
+
+    esp_sleep_enable_ext1_wakeup(
+        GPIO_SEL_0 | GPIO_SEL_35 | GPIO_SEL_36, // botões + touch
+        EXT1_WAKEUP_ANY_HIGH);
+
+    esp_deep_sleep_start();
+}
+
+void wakeUp() {
+    DBG_PRINTLN("[PWR] Acordando...");
+    backlight_on();
+}
+
+// ============================================================================
+// SETUP PRINCIPAL
+// ============================================================================
+
+void setup() {
+    // Inicializa serial
+    Serial.begin(SERIAL_BAUD);
+
+    // Inicializa todo o hardware
+    initHardware();
+
+    // Tela de splash
+    splashScreen();
+
+    // Inicializa FreeRTOS
+    initFreeRTOS();
+
+    // Inicializa меню
+    menu_init();
+
+    // Transição suave para o menu
+    backlight_on();
+    currentAppState = STATE_MENU;
+
+    // Inicializa lastActivity
+    lastActivityMs = millis();
+
+    DBG_PRINTLN("");
+    DBG_PRINTLN(F("[SYS] ====== Sistema Inicializado ======"));
+    DBG_PRINTLN(F("[SYS] Menu principal pronto"));
+    DBG_PRINTLN("");
+}
+
+// ============================================================================
+// LOOP PRINCIPAL (não-bloqueante)
+// ============================================================================
+
 void loop() {
-  currentMillis = millis();
-  buttons_update();
-  buzzer_update();
+    buttons_update();
+    buzzer_update();
+    powerManagement();
 
-  switch (currentAppState) {
-    case STATE_SPLASH:
-      // Splash é tratado no setup(), não precisa de nada aqui
-      break;
+    switch (currentAppState) {
+        case STATE_SPLASH:
+            break;
 
-    case STATE_MENU:
-      menu_handle();
-      break;
+        case STATE_MENU:
+            menu_handle();
+            break;
 
-    case STATE_MEASURING:
-      measurements_handle();
-      break;
+        case STATE_MEASURE_RESISTOR:
+        case STATE_MEASURE_CAPACITOR:
+        case STATE_MEASURE_DIODE:
+        case STATE_MEASURE_TRANSISTOR:
+        case STATE_MEASURE_INDUCTOR:
+        case STATE_MEASURE_IC:
+            measurements_handle();
+            break;
 
-    case STATE_THERMAL_PROBE:
-      thermal_handle();
-      break;
+        case STATE_MULTIMETER:
+            multimeter_handle();
+            break;
 
-    case STATE_SETTINGS:
-      handle_settings_menu();
-      break;
+        case STATE_THERMAL_PROBE:
+            thermal_handle();
+            break;
 
-    case STATE_ABOUT:
-      // About é modal (handled dentro do draw_about_screen)
-      break;
+        case STATE_CALIBRATION:
+            calibration_handle();
+            break;
 
-    case STATE_HISTORY:
-      handle_history();
-      break;
+        case STATE_SETTINGS:
+            settings_handle();
+            break;
 
-    case STATE_SCANNER:
-      handle_scanner();
-      break;
+        case STATE_ABOUT:
+            about_handle();
+            break;
 
-    case STATE_STATS:
-      handle_stats();
-      break;
+        case STATE_HISTORY:
+            history_handle();
+            break;
 
-    case STATE_MULTIMETER:
-      multimeter_handle();
-      break;
+        case STATE_STATS:
+            stats_handle();
+            break;
 
-    case STATE_TOUCH_CALIBRATE:
-      // A função calibrate_touch é bloqueante e muda o estado ao terminar
-      calibrate_touch();
-      break;
-  }
-
-  update_leds();
+        case STATE_SCANNER:
+            scanner_handle();
+            break;
+    }
 }

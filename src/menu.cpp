@@ -1,484 +1,568 @@
 // ============================================================================
-// Component Tester PRO v3.0 — Menu Principal (CYD Edition)
-// ============================================================================
-// Menu grid 2x3 com 7 itens (adicionado Multímetro).
-// Navegação via touchscreen (primário) ou botões físicos (fallback).
+// Component Tester PRO v3.0 — Sistema de Menu e Navegação (Implementação)
+// Descrição: Implementação do menu principal com grid cards
 // ============================================================================
 
 #include "menu.h"
+#include "globals.h"
+#include "graphics.h"
 #include "buttons.h"
 #include "buzzer.h"
-#include "drawings.h"
-#include "measurements.h"
-#include "multimeter.h"
-#include "utils.h"
-#include "config.h"
-#include <TFT_eSPI.h>
-#include <Arduino.h>
+#include "leds.h"
+#include "logger.h"
+#include "thermal.h"
 
 // ============================================================================
-// ITENS DO MENU PRINCIPAL
+// MENU CARD — DEFINIÇÕES DO MENU PRINCIPAL
 // ============================================================================
-// Grid 2x4 (expandido para incluir o novo Multímetro)
-MenuItem menuItems[] = {
-  {"Medir",        STATE_MEASURING},
-  {"Termica",      STATE_THERMAL_PROBE},
-  {"Scanner",      STATE_SCANNER},
-  {"Multimetro",   STATE_MULTIMETER},    // NOVO: AC/DC via ZMPT+INA219
-  {"Historico",    STATE_HISTORY},
-  {"Estatisticas", STATE_STATS},
-  {"Ajustes",      STATE_SETTINGS}
+const MenuCard MAIN_MENU_CARDS[] = {
+    // --- Modo Component Tester ---
+    { "Resistor",   STATE_MEASURE_RESISTOR,   ICON_RESISTOR,   UI_COLORS::RESISTOR,    MENU_FLAG_NONE },
+    { "Capacitor",  STATE_MEASURE_CAPACITOR,  ICON_CAPACITOR, UI_COLORS::CAPACITOR,   MENU_FLAG_NONE },
+    { "Diodo",     STATE_MEASURE_DIODE,     ICON_DIODE,     UI_COLORS::DIODE,       MENU_FLAG_NONE },
+    { "Transistor", STATE_MEASURE_TRANSISTOR, ICON_TRANSISTOR,UI_COLORS::TRANSISTOR, MENU_FLAG_NONE },
+    { "Indutor",   STATE_MEASURE_INDUCTOR,  ICON_INDUCTOR, UI_COLORS::PRIMARY,    MENU_FLAG_NONE },
+    { "IC/CI",     STATE_MEASURE_IC,       ICON_IC,       UI_COLORS::IC,        MENU_FLAG_NONE },
+
+    // --- Modo Multímetro ---
+    { "Multimetro", STATE_MULTIMETER,        ICON_MULTIMETER,UI_COLORS::ACCENT,     MENU_FLAG_NONE },
+
+    // --- Ferramentas ---
+    { "Temperatura", STATE_THERMAL_PROBE,   ICON_THERMOMETER,UI_COLORS::DANGER, MENU_FLAG_NONE },
+    { "Scanner",   STATE_SCANNER,           ICON_SCANNER,   UI_COLORS::SUCCESS,    MENU_FLAG_NONE },
+
+    // --- Configurações ---
+    { "Calibrar",  STATE_CALIBRATION,        ICON_CALIBRATE, UI_COLORS::WARNING,    MENU_FLAG_NONE },
+    { "Historico", STATE_HISTORY,          ICON_HISTORY,   UI_COLORS::TEXT_DIM,   MENU_FLAG_NONE },
+    { "Estatisticas", STATE_STATS,          ICON_STATS,    UI_COLORS::TEXT_DIM,   MENU_FLAG_NONE },
+    { "Config",   STATE_SETTINGS,           ICON_SETTINGS,  UI_COLORS::TEXT_DIM,   MENU_FLAG_NONE },
+    { "Sobre",    STATE_ABOUT,              ICON_ABOUT,    UI_COLORS::TEXT_DIM,   MENU_FLAG_NONE },
+    { "Teste",    STATE_MEASURE_GENERIC,   ICON_TEST,     UI_COLORS::UNKNOWN,   MENU_FLAG_NONE },
 };
-
-const int NUM_MENU_ITEMS = sizeof(menuItems) / sizeof(menuItems[0]);
+const uint8_t MAIN_MENU_COUNT = sizeof(MAIN_MENU_CARDS) / sizeof(MenuCard);
 
 // ============================================================================
-// INICIALIZAÇÃO DO MENU
+// MENU CARD — DEFINIÇÕES DO MENU DE MEDIÇÃO
+// ============================================================================
+const MenuCard MEASURE_MENU_CARDS[] = {
+    { "Resistor",   STATE_MEASURE_RESISTOR,  ICON_RESISTOR,   UI_COLORS::RESISTOR,    MENU_FLAG_NONE },
+    { "Capacitor", STATE_MEASURE_CAPACITOR, ICON_CAPACITOR, UI_COLORS::CAPACITOR,  MENU_FLAG_NONE },
+    { "Diodo",    STATE_MEASURE_DIODE,       ICON_DIODE,     UI_COLORS::DIODE,      MENU_FLAG_NONE },
+    { "Transistor", STATE_MEASURE_TRANSISTOR, ICON_TRANSISTOR, UI_COLORS::TRANSISTOR, MENU_FLAG_NONE },
+    { "Indutor",  STATE_MEASURE_INDUCTOR,   ICON_INDUCTOR,  UI_COLORS::PRIMARY,    MENU_FLAG_NONE },
+    { "IC/CI",    STATE_MEASURE_IC,         ICON_IC,        UI_COLORS::IC,        MENU_FLAG_NONE },
+};
+const uint8_t MEASURE_MENU_COUNT = sizeof(MEASURE_MENU_CARDS) / sizeof(MenuCard);
+
+// ============================================================================
+// MENU CARD — DEFINIÇÕES DO MENU DE CONFIGURAÇÃO
+// ============================================================================
+const MenuCard SETTINGS_MENU_CARDS[] = {
+    { "Brilho",        100, ICON_BRIGHTNESS, UI_COLORS::WARNING,  MENU_FLAG_NONE },
+    { "Som",           101, ICON_SOUND,      UI_COLORS::SUCCESS,  MENU_FLAG_NONE },
+    { "Modo Escuro",   102, ICON_DARK,       UI_COLORS::PRIMARY,   MENU_FLAG_NONE },
+    { "Auto-Dormir",   103, ICON_SLEEP,      UI_COLORS::TEXT_DIM,  MENU_FLAG_NONE },
+    { "Temperatura",  104, ICON_THERMOMETER, UI_COLORS::DANGER,   MENU_FLAG_NONE },
+    { "ZMPT Calib",    105, ICON_CALIBRATE,   UI_COLORS::WARNING,  MENU_FLAG_NONE },
+    { "Reset Stats",   106, ICON_RESET,      UI_COLORS::DANGER,   MENU_FLAG_NONE },
+    { "Factory Reset", 107, ICON_DELETE,    UI_COLORS::DANGER,  MENU_FLAG_NONE },
+};
+const uint8_t SETTINGS_MENU_COUNT = sizeof(SETTINGS_MENU_CARDS) / sizeof(MenuCard);
+
+// ============================================================================
+// VARIÁVEIS DO MENU
+// ============================================================================
+static int currentCardIndex = 0;
+static int totalCardsPerScreen = 6;
+static int currentPage = 0;
+static int totalPages = 1;
+static bool menuNeedsRedraw = true;
+static unsigned long touchLastX = 0;
+static unsigned long touchLastY = 0;
+
+// Dimensões dos cards
+static int cardW, cardH, gridStartX, gridStartY;
+static int gridCols = 2, gridRows = 3;
+
+// ============================================================================
+// INICIALIZAÇÃO
 // ============================================================================
 void menu_init() {
-  totalMenuItems = NUM_MENU_ITEMS;
-  currentMenuItem = 0;
-  draw_menu();
+    // Calcular dimensões dos cards para o grid 2x3
+    int margin = 10;
+    int padding = 8;
+    int gap = 8;
+
+    int contentW = 320;
+    int contentH = 240 - STATUS_BAR_HEIGHT - FOOTER_HEIGHT;
+    int contentY = STATUS_BAR_HEIGHT;
+
+    cardW = (contentW - margin * 2 - gap) / gridCols;
+    cardH = (contentH - padding * 2 - gap * (gridRows - 1)) / gridRows;
+    gridStartX = margin;
+    gridStartY = contentY + padding;
+    totalCardsPerScreen = gridCols * gridRows;
+
+    totalPages = (MAIN_MENU_COUNT + totalCardsPerScreen - 1) / totalCardsPerScreen;
+
+    currentCardIndex = 0;
+    currentPage = 0;
+    menuNeedsRedraw = true;
+
+    DBG_PRINTLN("[MENU] Menu inicializado");
 }
 
 // ============================================================================
-// HANDLER DO MENU (loop)
+// LOOP PRINCIPAL DO MENU
 // ============================================================================
 void menu_handle() {
-  buttons_update();
+    // Verifica se precisa redesenhar
+    if (menuNeedsRedraw) {
+        menu_draw();
+        menuNeedsRedraw = false;
+    }
 
-  int cols = MENU_GRID_COLS;
-  int row = currentMenuItem / cols;
-  int col = currentMenuItem % cols;
+    // Processa botões físicos
+    if (btn_just_pressed(BTN_UP) || btn_just_pressed(BTN_LEFT)) {
+        menu_navigate(-1);
+    } else if (btn_just_pressed(BTN_DOWN) || btn_just_pressed(BTN_RIGHT)) {
+        menu_navigate(1);
+    } else if (btn_just_pressed(BTN_CENTER) || btn_just_pressed(BTN_OK)) {
+        menu_select();
+    } else if (btn_just_pressed(BTN_BACK)) {
+        // Opcional: mostrar tela sobre ou não fazer nada
+    }
 
-  // --- Navegação por botões ou touch ---
-  if (isUpPressed()) {
-    row--;
-    if (row < 0) row = (NUM_MENU_ITEMS - 1) / cols;
-    currentMenuItem = row * cols + col;
-    if (currentMenuItem >= NUM_MENU_ITEMS) currentMenuItem = NUM_MENU_ITEMS - 1;
-    draw_menu();
-    play_beep(50);
-  }
-  if (isDownPressed()) {
-    row++;
-    if (row > (NUM_MENU_ITEMS - 1) / cols) row = 0;
-    currentMenuItem = row * cols + col;
-    if (currentMenuItem >= NUM_MENU_ITEMS) currentMenuItem = NUM_MENU_ITEMS - 1;
-    draw_menu();
-    play_beep(50);
-  }
-  if (isLeftPressed()) {
-    col--;
-    if (col < 0) col = cols - 1;
-    currentMenuItem = row * cols + col;
-    if (currentMenuItem >= NUM_MENU_ITEMS) currentMenuItem = NUM_MENU_ITEMS - 1;
-    draw_menu();
-    play_beep(50);
-  }
-  if (isRightPressed()) {
-    col++;
-    if (col >= cols) col = 0;
-    currentMenuItem = row * cols + col;
-    if (currentMenuItem >= NUM_MENU_ITEMS) currentMenuItem = NUM_MENU_ITEMS - 1;
-    draw_menu();
-    play_beep(50);
-  }
+    // Processa toque
+    int touchedCard = menu_process_touch();
+    if (touchedCard >= 0) {
+        buzzer_beep(100);
+        menu_updateSelection(touchedCard);
+        delay(150);
+        menu_select();
+    }
+}
 
-  // --- Seleção ---
-  if (isOkPressed()) {
-    play_beep(100);
-    currentAppState = menuItems[currentMenuItem].targetState;
-    tft.fillScreen(UI_COLOR_BG);
+// ============================================================================
+// DESENHAR MENU
+// ============================================================================
+void menu_draw() {
+    tft.fillScreen(UI_COLORS::BACKGROUND);
+
+    // Barra de status
     draw_status_bar();
 
-    switch (currentAppState) {
-      case STATE_MEASURING:     draw_measurements_menu(); break;
-      case STATE_THERMAL_PROBE: break; // Handled in loop
-      case STATE_SCANNER:       draw_scanner(); break;
-      case STATE_MULTIMETER:    draw_multimeter_menu(); break; // NOVO
-      case STATE_HISTORY:       draw_history(); break;
-      case STATE_STATS:         draw_stats(); break;
-      case STATE_SETTINGS:      draw_settings_menu(); break;
-      case STATE_ABOUT:         draw_about_screen(); break;
-      default: break;
+    // Indicador de página (se houver mais de uma página)
+    if (totalPages > 1) {
+        draw_page_indicator(currentPage, totalPages);
     }
-  }
-}
 
-// ============================================================================
-// DESENHO DO MENU PRINCIPAL (Grid)
-// ============================================================================
-void draw_menu() {
-  tft.fillScreen(UI_COLOR_BG);
-  draw_status_bar();
+    // Desenha os cards visíveis
+    int cardIndex = currentPage * totalCardsPerScreen;
+    int cardsOnThisPage = min(totalCardsPerScreen,
+                           MAIN_MENU_COUNT - cardIndex);
 
-  // Grid layout (adaptado para 7 itens em grid 2x4)
-  int startX = 5;
-  int startY = STATUS_BAR_HEIGHT + 6;
-  int spacingX = 160;
-  int spacingY = 52; // Levemente menor para caber 4 linhas
+    for (int i = 0; i < cardsOnThisPage; i++) {
+        int idx = cardIndex + i;
+        int col = i % gridCols;
+        int row = i / gridCols;
 
-  for (int i = 0; i < NUM_MENU_ITEMS; i++) {
-    int r = i / MENU_GRID_COLS;
-    int c = i % MENU_GRID_COLS;
-    int x = startX + c * spacingX;
-    int y = startY + r * spacingY;
+        int x = gridStartX + col * (cardW + gap);
+        int y = gridStartY + row * (cardH + gap);
 
-    draw_grid_item(x, y, menuItems[i].text, i, (i == currentMenuItem));
-  }
-
-  draw_footer_modern();
-}
-
-// ============================================================================
-// MENU DE CONFIGURAÇÕES
-// ============================================================================
-void draw_settings_menu() {
-  tft.fillScreen(UI_COLOR_BG);
-  draw_status_bar();
-  draw_modern_card("Configuracoes", UI_COLOR_ACCENT);
-
-  const char *settings[] = {
-    "Calibrar Probes",
-    "Modo Escuro",
-    "Silencioso",
-    "Timeout",
-    "Backlight",
-    "Calibrar Touch",
-    "Sobre o CT"
-  };
-  tft.setTextSize(1);
-  for (int i = 0; i < 7; i++) {
-    tft.setCursor(20, 60 + i * 20);
-    tft.setTextColor(UI_COLOR_TEXT);
-    tft.print(i + 1);
-    tft.print(F(". "));
-    tft.println(settings[i]);
-  }
-  draw_footer_modern();
-}
-
-void handle_settings_menu() {
-  static int currentSettingsItem = 0;
-  const int NUM_SETTINGS_ITEMS = 7;
-
-  if (isUpPressed()) {
-    currentSettingsItem = (currentSettingsItem - 1 + NUM_SETTINGS_ITEMS) % NUM_SETTINGS_ITEMS;
-    draw_settings_menu_with_highlights(currentSettingsItem);
-    play_beep(50);
-  }
-  if (isDownPressed()) {
-    currentSettingsItem = (currentSettingsItem + 1) % NUM_SETTINGS_ITEMS;
-    draw_settings_menu_with_highlights(currentSettingsItem);
-    play_beep(50);
-  }
-
-  if (isOkPressed()) {
-    play_beep(100);
-    switch (currentSettingsItem) {
-      case 0: calibrate_probes(); break;
-      case 1:
-        deviceSettings.darkMode = !deviceSettings.darkMode;
-        saveSettings();
-        break;
-      case 2:
-        deviceSettings.silentMode = !deviceSettings.silentMode;
-        saveSettings();
-        break;
-      case 3:
-        deviceSettings.timeoutDuration = (deviceSettings.timeoutDuration == 30000) ? 60000 : 30000;
-        saveSettings();
-        break;
-      case 4:
-        // Ciclar backlight: 50 → 100 → 150 → 200 → 255 → 50
-        deviceSettings.backlight += 50;
-        if (deviceSettings.backlight < 50) deviceSettings.backlight = 50;
-        if (deviceSettings.backlight > 255) deviceSettings.backlight = 50;
-        ledcWrite(PIN_TFT_BL, deviceSettings.backlight);
-        saveSettings();
-        break;
-      case 5:
-        calibrate_touch();
-        return;
-      case 6:
-        draw_about_screen();
-        return;
+        bool selected = (idx == currentCardIndex);
+        menu_draw_card(x, y, cardW, cardH,
+                     &MAIN_MENU_CARDS[idx], selected);
     }
-    draw_settings_menu_with_highlights(currentSettingsItem);
-  }
 
-  if (isBackPressed()) {
-    currentAppState = STATE_MENU;
-    draw_menu();
-  }
+    // Rodapé
+    draw_footer();
 }
 
-void draw_settings_menu_with_highlights(int highlighted) {
-  tft.fillScreen(UI_COLOR_BG);
-  draw_status_bar();
-  draw_modern_card("Configuracoes", UI_COLOR_ACCENT);
+void menu_refresh() {
+    menuNeedsRedraw = true;
+}
 
-  const char *settings[] = {
-    "Calibrar Probes",
-    "Modo Escuro",
-    "Silencioso",
-    "Timeout",
-    "Backlight",
-    "Calibrar Touch",
-    "Sobre o CT"
-  };
+// ============================================================================
+// DESENHAR CARD DO MENU
+// ============================================================================
+void menu_draw_card(int x, int y, int w, int h,
+                   const MenuCard* card, bool selected) {
+    uint16_t bgColor = selected ? shiftColor(card->color, 80) : UI_COLORS::CARD_BG;
+    uint16_t borderColor = selected ? card->color : UI_COLORS::BORDER;
 
-  // Valores atuais das configurações
-  const char *values[] = {
-    "",
-    deviceSettings.darkMode ? "[ON]" : "[OFF]",
-    deviceSettings.silentMode ? "[ON]" : "[OFF]",
-    deviceSettings.timeoutDuration == 30000 ? "[30s]" : "[60s]",
-    "",  // Backlight será mostrado inline
-    "",
-    ""
-  };
+    // Fundo do card
+    tft.fillRoundRect(x, y, w, h, 8, bgColor);
 
-  tft.setTextSize(1);
-  for (int i = 0; i < 7; i++) {
-    int yPos = 60 + i * 20;
-    tft.setCursor(20, yPos);
-
-    if (i == highlighted) {
-      tft.fillRoundRect(15, yPos - 4, tft.width() - 30, 18, 4, UI_COLOR_HILIGHT);
-      tft.setTextColor(UI_COLOR_TEXT);
+    // Borda
+    if (selected) {
+        tft.drawRoundRect(x, y, w, h, 8, borderColor);
+        tft.drawRoundRect(x + 2, y + 2, w - 4, h - 4, 6,
+                          shiftColor(borderColor, -30));
     } else {
-      tft.setTextColor(UI_COLOR_GREY);
+        tft.drawRoundRect(x, y, w, h, 8, borderColor);
     }
 
-    tft.print(i + 1);
-    tft.print(F(". "));
-    tft.print(settings[i]);
+    // Ícone
+    int iconX = x + w / 2 - 20;
+    int iconY = y + 12;
+    draw_component_icon(card->iconType, iconX, iconY, card->color);
 
-    // Mostrar valor atual
-    if (strlen(values[i]) > 0) {
-      tft.print(F(" "));
-      tft.setTextColor(UI_COLOR_ACCENT);
-      tft.print(values[i]);
+    // Label
+    tft.setTextColor(selected ? UI_COLORS::TEXT : UI_COLORS::TEXT_DIM);
+    tft.setTextSize(2);
+    tft.setTextDatum(TC_DATUM);
+    tft.setCursor(x + w / 2, y + h - 14);
+    tft.print(card->label);
+    tft.setTextDatum(TL_DATUM);
+
+    // Badge de alerta
+    if (card->flags & MENU_FLAG_WARNING) {
+        draw_warning_badge(x + w - 14, y + 4);
     }
-
-    // Backlight: mostrar valor numérico
-    if (i == 4) {
-      tft.setTextColor(UI_COLOR_ACCENT);
-      tft.print(F(" ["));
-      tft.print(deviceSettings.backlight);
-      tft.print(F("]"));
-    }
-  }
-
-  draw_footer_modern();
 }
 
 // ============================================================================
-// TELA "SOBRE"
+// NAVEGAÇÃO
 // ============================================================================
-void draw_about_screen() {
-  tft.fillScreen(UI_COLOR_BG);
-  draw_status_bar();
-  draw_modern_card("Sobre o Dispositivo", UI_COLOR_ACCENT);
-
-  tft.setTextSize(1);
-  tft.setTextColor(UI_COLOR_TEXT);
-  tft.setCursor(20, 60);  tft.println(F("Component Tester PRO"));
-  tft.setCursor(20, 75);  tft.print(F("Versao: ")); tft.println(F(FW_VERSION " (" FW_CODENAME ")"));
-
-  tft.setCursor(20, 95);  tft.println(F("Hardware: ESP32-2432S028R"));
-  tft.setCursor(20, 110); tft.println(F("Display: ILI9341 2.8\" 320x240"));
-  tft.setCursor(20, 125); tft.println(F("Touch: XPT2046 Resistivo"));
-  tft.setCursor(20, 140); tft.println(F("CPU: ESP32 Dual Core 240MHz"));
-  tft.setCursor(20, 155);  tft.println(F("RAM: 520KB | Flash: 4MB"));
-  
-  tft.setCursor(20, 180);
-  tft.setTextColor(UI_COLOR_ACCENT);
-  tft.println(F("Desenvolvido por Leandro"));
-
-  tft.setCursor(20, 195);
-  tft.setTextColor(UI_COLOR_GREY);
-  tft.println(F("github.com/lelebrr/Component_Tester"));
-
-  draw_footer_modern();
-
-  // Aguardar input para voltar
-  while (!isBackPressed() && !isOkPressed()) {
-    buttons_update();
-    delay(10);
-  }
-  currentAppState = STATE_MENU;
-  draw_menu();
+void menu_updateSelection(int index) {
+    if (index == currentCardIndex) return;
+    currentCardIndex = index;
+    currentPage = currentCardIndex / totalCardsPerScreen;
+    menuNeedsRedraw = true;
 }
 
-// ============================================================================
-// HISTÓRICO DE MEDIÇÕES
-// ============================================================================
-void draw_history() {
-  tft.fillScreen(UI_COLOR_BG);
-  draw_status_bar();
-  draw_modern_card("Historico", UI_COLOR_ACCENT);
+void menu_navigate(int direction) {
+    buzzer_beep(80);
 
-  tft.setTextSize(1);
-  if (historyCount == 0) {
-    tft.setCursor(30, 80);
-    tft.setTextColor(UI_COLOR_GREY);
-    tft.println(F("Nenhum registro encontrado"));
-  } else {
-    int startIdx = (historyCount < HISTORY_SIZE) ? 0 : historyIndex;
-    int maxToShow = min(historyCount, 8); // Mais linhas com a tela maior
-
-    for (int i = 0; i < maxToShow; i++) {
-      int idx = (startIdx + i) % HISTORY_SIZE;
-      tft.setCursor(20, 58 + i * 18);
-      tft.setTextColor(measurementHistory[idx].isGood ? UI_COLOR_GREEN : UI_COLOR_RED);
-      tft.print(measurementHistory[idx].name);
-      tft.print(F(": "));
-      tft.setTextColor(UI_COLOR_TEXT);
-      fprint(tft, measurementHistory[idx].value, 1);
-
-      // Temperatura no momento da medição
-      tft.setTextColor(UI_COLOR_GREY);
-      tft.print(F("  ("));
-      tft.print(measurementHistory[idx].temp, 0);
-      tft.print(F("C)"));
+    int newIndex = currentCardIndex + direction;
+    if (newIndex < 0) {
+        newIndex = MAIN_MENU_COUNT - 1;
+    } else if (newIndex >= (int)MAIN_MENU_COUNT) {
+        newIndex = 0;
     }
 
-    // Indicador de scroll se houver mais registros
-    if (historyCount > maxToShow) {
-      tft.setCursor(20, 58 + maxToShow * 18);
-      tft.setTextColor(UI_COLOR_ACCENT);
-      tft.print(F("... e mais "));
-      tft.print(historyCount - maxToShow);
-      tft.print(F(" registros"));
-    }
-  }
+    currentCardIndex = newIndex;
+    int newPage = currentCardIndex / totalCardsPerScreen;
 
-  draw_footer_modern();
+    if (newPage != currentPage) {
+        currentPage = newPage;
+        menuNeedsRedraw = true;
+    } else {
+        // Apenas atualiza o highlight sem redesenhar tudo
+        menuNeedsRedraw = true;
+    }
+
+    lastActivityMs = millis();
 }
 
-void handle_history() {
-  buttons_update();
-  if (isBackPressed()) {
+void menu_select() {
+    buzzer_beep(150);
+    previousAppState = currentAppState;
+    currentAppState = MAIN_MENU_CARDS[currentCardIndex].targetState;
+    lastActivityMs = millis();
+    DBG_PRINTF("[MENU] Selecionado: %s (estado %d)\n",
+              MAIN_MENU_CARDS[currentCardIndex].label,
+              currentAppState);
+}
+
+void menu_back() {
+    buzzer_beep(80);
     currentAppState = STATE_MENU;
-    draw_menu();
-  }
+    menu_refresh();
 }
 
 // ============================================================================
-// SCANNER AUTOMÁTICO
+// PROCESSAMENTO DE TOQUE
 // ============================================================================
-void draw_scanner() {
-  tft.fillScreen(UI_COLOR_BG);
-  draw_status_bar();
-  draw_modern_card("Scanner Automatico", UI_COLOR_ACCENT);
+int menu_process_touch() {
+    TS_Point p = ts.getPoint();
 
-  tft.setCursor(30, 80);
-  tft.setTextColor(UI_COLOR_TEXT);
-  tft.println(F("Pressione OK para iniciar"));
-  tft.setCursor(30, 100);
-  tft.setTextColor(UI_COLOR_GREY);
-  tft.println(F("Conecte o componente na"));
-  tft.setCursor(30, 115);
-  tft.print(F("probe (GPIO "));
-  tft.print(PIN_PROBE_MAIN);
-  tft.println(F(") antes."));
+    if (p.z < TOUCH_MIN_Z) {
+        touchLastX = 0;
+        touchLastY = 0;
+        return -1;
+    }
 
-  draw_footer_modern();
+    // Mapeia coordenadas para a tela
+    int tx = map(p.x, TOUCH_X_MIN, TOUCH_X_MAX, 0, 320);
+    int ty = map(p.y, TOUCH_Y_MIN, TOUCH_Y_MAX, 0, 240);
+
+    // Verifica swipe
+    if (touchLastX > 0) {
+        int dx = abs(tx - (int)touchLastX);
+        if (dx > TOUCH_SWIPE_MIN_DX) {
+            if (tx > (int)touchLastX) {
+                menu_navigate(-1); // swipe right = prev
+            } else {
+                menu_navigate(1);  // swipe left = next
+            }
+            touchLastX = tx;
+            touchLastY = ty;
+            return -1;
+        }
+    }
+
+    touchLastX = tx;
+    touchLastY = ty;
+
+    // Verifica se tocou em algum card
+    int cardIndex = currentPage * totalCardsPerScreen;
+    int cardsOnThisPage = min(totalCardsPerScreen,
+                             MAIN_MENU_COUNT - cardIndex);
+
+    for (int i = 0; i < cardsOnThisPage; i++) {
+        int idx = cardIndex + i;
+        int col = i % gridCols;
+        int row = i / gridCols;
+
+        int x = gridStartX + col * (cardW + 8);
+        int y = gridStartY + row * (cardH + 8);
+
+        if (tx >= x && tx <= x + cardW && ty >= y && ty <= y + cardH) {
+            return idx;
+        }
+    }
+
+    return -1;
 }
 
-void handle_scanner() {
-  buttons_update();
-  static bool scanning = false;
+// ============================================================================
+// DESENHAR BARRA DE STATUS
+// ============================================================================
+void draw_status_bar() {
+    tft.fillRect(0, 0, 320, STATUS_BAR_HEIGHT, UI_COLORS::STATUS_BG);
 
-  if (!scanning && isOkPressed()) {
-    scanning = true;
-    play_beep(100);
-    tft.fillRect(20, 70, 260, 100, UI_COLOR_BG);
-    tft.setCursor(30, 80);
-    tft.setTextColor(UI_COLOR_ACCENT);
-    tft.println(F("Escaneando..."));
-  }
+    // Linha decorativa inferior
+    tft.drawLine(0, STATUS_BAR_HEIGHT - 1, 320, STATUS_BAR_HEIGHT - 1,
+                   UI_COLORS::PRIMARY);
 
-  if (scanning) {
-    auto_detect_component();
-    delay(1000);
-    scanning = false;
-    draw_scanner();
-  }
+    // Versão do firmware
+    tft.setTextColor(UI_COLORS::STATUS_TEXT);
+    tft.setTextSize(1);
+    tft.setCursor(8, 10);
+    tft.print(FW_NAME);
+    tft.print(F(" v"));
+    tft.print(FW_VERSION);
 
-  if (isBackPressed()) {
-    scanning = false;
-    currentAppState = STATE_MENU;
-    draw_menu();
-  }
+    // Indicador de SD Card
+    int sdX = 310;
+    if (sdCardPresent) {
+        tft.setTextColor(UI_COLORS::SUCCESS);
+        tft.print(F(" SD"));
+    } else {
+        tft.setTextColor(UI_COLORS::TEXT_HINT);
+        tft.print(F(" --"));
+    }
+
+    // Temperatura (se disponível)
+    if (lastTemperature > 0) {
+        char tempStr[16];
+        dtostrf(lastTemperature, 4, 1, tempStr);
+        tft.setTextColor(lastTemperature > TEMP_WARNING ?
+                           UI_COLORS::DANGER : UI_COLORS::STATUS_TEXT);
+        tft.setCursor(150, 10);
+        tft.print(tempStr);
+        tft.print(F("C"));
+    }
 }
 
 // ============================================================================
-// ESTATÍSTICAS DE USO
+// DESENHAR RODAPÉ
 // ============================================================================
-void draw_stats() {
-  tft.fillScreen(UI_COLOR_BG);
-  draw_status_bar();
-  draw_modern_card("Estatisticas", UI_COLOR_ACCENT);
+void draw_footer() {
+    int y = 240 - FOOTER_HEIGHT;
+    tft.fillRect(0, y, 320, FOOTER_HEIGHT, UI_COLORS::STATUS_BG);
 
-  tft.setTextSize(1);
-  tft.setTextColor(UI_COLOR_TEXT);
-  tft.setCursor(30, 70);
-  tft.print(F("Total Medicoes: "));
-  tft.println(deviceSettings.totalMeasurements);
+    tft.drawLine(0, y, 320, y, UI_COLORS::BORDER);
 
-  tft.setCursor(30, 90);
-  tft.print(F("Componentes OK: "));
-  tft.println(deviceSettings.totalMeasurements - deviceSettings.faultyMeasurements);
+    tft.setTextColor(UI_COLORS::TEXT_HINT);
+    tft.setTextSize(1);
+    tft.setCursor(8, y + 5);
+    tft.print(F("<<< NAVIGAR >>> OK=SELECIONAR"));
 
-  tft.setCursor(30, 110);
-  tft.setTextColor(UI_COLOR_RED);
-  tft.print(F("Defeituosos: "));
-  tft.println(deviceSettings.faultyMeasurements);
-
-  // Taxa de falha com barra visual
-  if (deviceSettings.totalMeasurements > 0) {
-    float pct = (float)deviceSettings.faultyMeasurements / deviceSettings.totalMeasurements * 100.0f;
-
-    tft.setCursor(30, 140);
-    tft.setTextColor(UI_COLOR_ACCENT);
-    tft.print(F("Taxa de Falha: "));
-    tft.print(pct, 1);
-    tft.println(F("%"));
-
-    // Barra de progresso visual
-    tft.drawRect(30, 160, 220, 12, UI_COLOR_GREY);
-    int barW = (int)(pct * 2.2f);
-    if (barW > 218) barW = 218;
-    tft.fillRect(31, 161, barW, 10, UI_COLOR_RED);
-
-    // Labels da barra
-    tft.setCursor(30, 175);
-    tft.setTextColor(UI_COLOR_GREY);
-    tft.print(F("0%"));
-    tft.setCursor(230, 175);
-    tft.print(F("100%"));
-  }
-
-  // Info do sistema
-  tft.setCursor(30, 200);
-  tft.setTextColor(UI_COLOR_GREY);
-  tft.print(F("RAM livre: "));
-  tft.print(ESP.getFreeHeap() / 1024);
-  tft.print(F("KB | Uptime: "));
-  tft.print(millis() / 60000);
-  tft.print(F("min"));
-
-  draw_footer_modern();
+    // Indicador de brilho
+    if (backlightOn) {
+        tft.setCursor(250, y + 5);
+        tft.print(F("Backlight ON"));
+    } else {
+        tft.setTextColor(UI_COLORS::TEXT_HINT);
+        tft.setCursor(250, y + 5);
+        tft.print(F("Backlight OFF"));
+    }
 }
 
-void handle_stats() {
-  buttons_update();
-  if (isBackPressed()) {
-    currentAppState = STATE_MENU;
-    draw_menu();
-  }
+// ============================================================================
+// INDICADOR DE PÁGINA
+// ============================================================================
+void draw_page_indicator(int page, int total) {
+    int dotSize = 4;
+    int gap = 6;
+    int totalDotsW = total * (dotSize + gap) - gap;
+    int startX = (320 - totalDotsW) / 2;
+    int y = 228;
+
+    for (int i = 0; i < total; i++) {
+        int x = startX + i * (dotSize + gap);
+        uint16_t color = (i == page) ?
+                           UI_COLORS::PRIMARY : UI_COLORS::BORDER;
+        tft.fillCircle(x, y, dotSize / 2, color);
+    }
+}
+
+// ============================================================================
+// RESULTADO CARD
+// ============================================================================
+void draw_result_card(const char* component, const char* value,
+                     const char* unit, const char* status, uint16_t statusColor) {
+    // Fundo
+    tft.fillScreen(UI_COLORS::BACKGROUND);
+
+    // Barra de status
+    draw_status_bar();
+
+    // Card central
+    int cardX = 40;
+    int cardY = 50;
+    int cardW = 240;
+    int cardH = 140;
+
+    tft.fillRoundRect(cardX, cardY, cardW, cardH, 12,
+                      UI_COLORS::CARD_BG);
+    tft.drawRoundRect(cardX, cardY, cardW, cardH, 12,
+                      statusColor);
+    tft.drawRoundRect(cardX + 3, cardY + 3, cardW - 6, cardH - 6,
+                      shiftColor(statusColor, -40));
+
+    // Componente
+    tft.setTextColor(UI_COLORS::TEXT_DIM);
+    tft.setTextSize(2);
+    tft.setTextDatum(TC_DATUM);
+    tft.setCursor(cardX + cardW / 2, cardY + 15);
+    tft.print(component);
+    tft.setTextDatum(TL_DATUM);
+
+    // Valor principal
+    tft.setTextColor(UI_COLORS::TEXT);
+    tft.setTextSize(4);
+    tft.setTextDatum(TC_DATUM);
+    tft.setCursor(cardX + cardW / 2, cardY + 50);
+    tft.print(value);
+    tft.setTextSize(2);
+    tft.setCursor(cardX + cardW / 2, cardY + 80);
+    tft.print(unit);
+    tft.setTextDatum(TL_DATUM);
+
+    // Status
+    tft.fillRoundRect(cardX + 40, cardY + cardH - 35, cardW - 80, 22,
+                        8, statusColor);
+    tft.setTextColor(UI_COLORS::TEXT);
+    tft.setTextSize(2);
+    tft.setTextDatum(TC_DATUM);
+    tft.setCursor(cardX + cardW / 2, cardY + cardH - 29);
+    tft.print(status);
+    tft.setTextDatum(TL_DATUM);
+
+    // Rodapé
+    draw_footer();
+}
+
+// ============================================================================
+// MODAL DE CONFIRMAÇÃO
+// ============================================================================
+bool draw_confirm_modal(const char* title, const char* message) {
+    tft.fillRoundRect(40, 70, 240, 100, 10, UI_COLORS::CARD_BG);
+    tft.drawRoundRect(40, 70, 240, 100, 10, UI_COLORS::WARNING);
+
+    tft.setTextColor(UI_COLORS::TEXT);
+    tft.setTextSize(2);
+    tft.setTextDatum(TC_DATUM);
+    tft.setCursor(160, 82);
+    tft.print(title);
+    tft.setTextSize(1);
+    tft.setCursor(160, 105);
+    tft.print(message);
+
+    tft.setTextColor(UI_COLORS::SUCCESS);
+    tft.setCursor(70, 145);
+    tft.print(F("TOQUE: OK = CONFIRMAR"));
+    tft.setTextColor(UI_COLORS::DANGER);
+    tft.setCursor(70, 160);
+    tft.print(F("CANCEL = VOLTAR"));
+    tft.setTextDatum(TL_DATUM);
+
+    // Espera confirmação ou cancelamento
+    while (true) {
+        if (btn_just_pressed(BTN_OK) || btn_just_pressed(BTN_CENTER)) {
+            return true;
+        }
+        if (btn_just_pressed(BTN_BACK)) {
+            return false;
+        }
+
+        TS_Point p = ts.getPoint();
+        if (p.z > TOUCH_MIN_Z) {
+            return true;
+        }
+
+        delay(50);
+    }
+}
+
+// ============================================================================
+// SUB-MENUS — PLACEHOLDERS
+// ============================================================================
+void measure_menu_draw() {}
+void measure_menu_handle() { menu_back(); }
+void settings_draw() {}
+void settings_handle() { menu_back(); }
+void about_draw() {}
+void about_handle() {
+    if (btn_just_pressed(BTN_BACK) || btn_just_pressed(BTN_OK)) {
+        menu_back();
+    }
+}
+void history_draw() {}
+void history_handle() { menu_back(); }
+void stats_draw() {}
+void stats_handle() { menu_back(); }
+void scanner_draw() {}
+void scanner_handle() { menu_back(); }
+void calibration_draw() {}
+void calibration_handle() { menu_back(); }
+int measure_process_touch() { return -1; }
+int settings_process_touch() { return -1; }
+void transition_out() {}
+void transition_in() {}
+void transition_slide_left() {}
+void transition_slide_right() {}
+
+// ============================================================================
+// HELPERS
+// ============================================================================
+uint16_t shiftColor(uint16_t color, int shift) {
+    uint8_t r = (color >> 11) & 0x1F;
+    uint8_t g = (color >> 5) & 0x3F;
+    uint8_t b = color & 0x1F;
+
+    r = constrain(r + (shift >> 3), 0, 31);
+    g = constrain(g + (shift >> 2), 0, 63);
+    b = constrain(b + (shift >> 3), 0, 31);
+
+    return (r << 11) | (g << 5) | b;
+}
+
+void draw_warning_badge(int x, int y) {
+    tft.fillCircle(x, y, 6, UI_COLORS::WARNING);
+    tft.setTextColor(UI_COLORS::TEXT);
+    tft.setTextSize(1);
+    tft.setTextDatum(TC_DATUM);
+    tft.setCursor(x, y - 3);
+    tft.print(F("!"));
+    tft.setTextDatum(TL_DATUM);
+}
+
+int draw_slider_modal(const char* title, int min, int max, int value) {
+    (void)title; (void)min; (void)max; (void)value;
+    return 0;
 }

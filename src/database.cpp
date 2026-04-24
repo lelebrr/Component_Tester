@@ -1,355 +1,272 @@
 // ============================================================================
-// Component Tester PRO v3.0 — Database de Componentes (CYD Edition)
-// ============================================================================
-// Migrado para ESP32 com as seguintes otimizações:
-//   1. SD Card inicializado no barramento HSPI (separado do TFT no VSPI)
-//   2. Índice de categorias em RAM para busca O(1) por categoria
-//   3. Buffer de leitura otimizado de 512 bytes
-//   4. Seek direto para a posição da categoria no arquivo CSV
+// Component Tester PRO v3.0 — Banco de Dados (Implementação)
+// Descrição: Banco de dados padrão de componentes e busca
 // ============================================================================
 
 #include "database.h"
-#include "config.h"
 #include "globals.h"
-#include <SD.h>
-#include <SPI.h>
-#include <stdlib.h>
-#include <string.h>
+#include "config.h"
 
 // ============================================================================
-// VARIÁVEIS GLOBAIS
+// BANCO DE DADOS PADRÃO (hardcoded — carrega na RAM)
+// Usado quando o SD Card não está presente ou não tem o arquivo CSV.
+// Total: ~200 componentes que cabem facilmente nos 520KB do ESP32.
 // ============================================================================
-CategoryIndex categoryIndex[CAT_COUNT];
-bool dbIndexLoaded = false;
+const ComponentInfo DB_DEFAULT[] = {
+    // --- RESISTORES ---
+    { COMP_RESISTOR, "Resistor 100R", "Resistor 100 ohms", "Ω",
+      90.0f, 110.0f, 80.0f, 120.0f, STATUS_GOOD },
+    { COMP_RESISTOR, "Resistor 220R", "Resistor 220 ohms", "Ω",
+      198.0f, 242.0f, 185.0f, 255.0f, STATUS_GOOD },
+    { COMP_RESISTOR, "Resistor 470R", "Resistor 470 ohms", "Ω",
+      423.0f, 517.0f, 400.0f, 540.0f, STATUS_GOOD },
+    { COMP_RESISTOR, "Resistor 1K", "Resistor 1kΩ", "Ω",
+      900.0f, 1100.0f, 800.0f, 1200.0f, STATUS_GOOD },
+    { COMP_RESISTOR, "Resistor 2K2", "Resistor 2.2kΩ", "Ω",
+      1980.0f, 2420.0f, 1800.0f, 2600.0f, STATUS_GOOD },
+    { COMP_RESISTOR, "Resistor 4K7", "Resistor 4.7kΩ", "Ω",
+      4230.0f, 5170.0f, 4000.0f, 5400.0f, STATUS_GOOD },
+    { COMP_RESISTOR, "Resistor 10K", "Resistor 10kΩ", "Ω",
+      9000.0f, 11000.0f, 8000.0f, 12000.0f, STATUS_GOOD },
+    { COMP_RESISTOR, "Resistor 22K", "Resistor 22kΩ", "Ω",
+      19800.0f, 24200.0f, 18000.0f, 26000.0f, STATUS_GOOD },
+    { COMP_RESISTOR, "Resistor 47K", "Resistor 47kΩ", "Ω",
+      42300.0f, 51700.0f, 40000.0f, 54000.0f, STATUS_GOOD },
+    { COMP_RESISTOR, "Resistor 100K", "Resistor 100kΩ", "Ω",
+      90000.0f, 110000.0f, 80000.0f, 120000.0f, STATUS_GOOD },
+    { COMP_RESISTOR, "Resistor 220K", "Resistor 220kΩ", "Ω",
+      198000.0f, 242000.0f, 180000.0f, 260000.0f, STATUS_GOOD },
+    { COMP_RESISTOR, "Resistor 470K", "Resistor 470kΩ", "Ω",
+      423000.0f, 517000.0f, 400000.0f, 540000.0f, STATUS_GOOD },
+    { COMP_RESISTOR, "Resistor 1M", "Resistor 1MΩ", "Ω",
+      900000.0f, 1100000.0f, 800000.0f, 1200000.0f, STATUS_GOOD },
+    { COMP_RESISTOR, "Resistor 2M2", "Resistor 2.2MΩ", "Ω",
+      1980000.0f, 2420000.0f, 1800000.0f, 2600000.0f, STATUS_GOOD },
+    { COMP_RESISTOR, "Resistor 4M7", "Resistor 4.7MΩ", "Ω",
+      4230000.0f, 5170000.0f, 4000000.0f, 5400000.0f, STATUS_GOOD },
 
-// Instância SPI para o SD Card (HSPI — separado do VSPI usado pelo TFT)
-SPIClass sdSPI(HSPI);
+    // --- CAPACITORES CERÂMICOS ---
+    { COMP_CAPACITOR, "Cap 10pF", "Capacitor cerâmico 10pF", "pF",
+      8.0f, 12.0f, 5.0f, 15.0f, STATUS_GOOD },
+    { COMP_CAPACITOR, "Cap 22pF", "Capacitor cerâmico 22pF", "pF",
+      18.0f, 26.0f, 15.0f, 30.0f, STATUS_GOOD },
+    { COMP_CAPACITOR, "Cap 47pF", "Capacitor cerâmico 47pF", "pF",
+      38.0f, 56.0f, 30.0f, 65.0f, STATUS_GOOD },
+    { COMP_CAPACITOR, "Cap 100pF", "Capacitor cerâmico 100pF", "pF",
+      80.0f, 120.0f, 70.0f, 140.0f, STATUS_GOOD },
+    { COMP_CAPACITOR, "Cap 1nF", "Capacitor cerâmico 1nF", "nF",
+      0.8f, 1.2f, 0.7f, 1.4f, STATUS_GOOD },
+    { COMP_CAPACITOR, "Cap 10nF", "Capacitor cerâmico 10nF", "nF",
+      8.0f, 12.0f, 7.0f, 14.0f, STATUS_GOOD },
+    { COMP_CAPACITOR, "Cap 100nF", "Capacitor cerâmico 100nF", "nF",
+      80.0f, 120.0f, 70.0f, 140.0f, STATUS_GOOD },
+
+    // --- CAPACITORES ELETROLÍTICOS ---
+    { COMP_ELECTROLYTIC, "Cap 1µF", "Eletrolítico 1µF", "µF",
+      0.8f, 1.5f, 0.7f, 2.0f, STATUS_GOOD },
+    { COMP_ELECTROLYTIC, "Cap 10µF", "Eletrolítico 10µF", "µF",
+      8.0f, 15.0f, 7.0f, 20.0f, STATUS_GOOD },
+    { COMP_ELECTROLYTIC, "Cap 47µF", "Eletrolítico 47µF", "µF",
+      38.0f, 56.0f, 30.0f, 65.0f, STATUS_GOOD },
+    { COMP_ELECTROLYTIC, "Cap 100µF", "Eletrolítico 100µF", "µF",
+      80.0f, 120.0f, 70.0f, 150.0f, STATUS_GOOD },
+    { COMP_ELECTROLYTIC, "Cap 220µF", "Eletrolítico 220µF", "µF",
+      176.0f, 264.0f, 150.0f, 300.0f, STATUS_GOOD },
+    { COMP_ELECTROLYTIC, "Cap 470µF", "Eletrolítico 470µF", "µF",
+      376.0f, 564.0f, 300.0f, 650.0f, STATUS_GOOD },
+    { COMP_ELECTROLYTIC, "Cap 1000µF", "Eletrolítico 1000µF", "µF",
+      800.0f, 1200.0f, 700.0f, 1500.0f, STATUS_GOOD },
+    { COMP_ELECTROLYTIC, "Cap 2200µF", "Eletrolítico 2200µF", "µF",
+      1760.0f, 2640.0f, 1500.0f, 3000.0f, STATUS_GOOD },
+    { COMP_ELECTROLYTIC, "Cap 4700µF", "Eletrolítico 4700µF", "µF",
+      3760.0f, 5640.0f, 3000.0f, 6500.0f, STATUS_GOOD },
+    { COMP_ELECTROLYTIC, "Cap 10000µF", "Eletrolítico 10000µF", "µF",
+      8000.0f, 12000.0f, 7000.0f, 15000.0f, STATUS_GOOD },
+
+    // --- DIODOS ---
+    { COMP_DIODE, "1N4001", "Diodo retificador 1N4001", "V",
+      0.5f, 0.9f, 0.4f, 1.0f, STATUS_GOOD },
+    { COMP_DIODE, "1N4007", "Diodo retificador 1N4007", "V",
+      0.5f, 0.9f, 0.4f, 1.0f, STATUS_GOOD },
+    { COMP_DIODE, "1N4148", "Diodo sinal 1N4148", "V",
+      0.5f, 0.9f, 0.4f, 1.0f, STATUS_GOOD },
+    { COMP_DIODE, "1N5819", "Schottky 1N5819", "V",
+      0.15f, 0.45f, 0.10f, 0.55f, STATUS_GOOD },
+
+    // --- LEDs ---
+    { COMP_LED, "LED Vermelho", "LED vermelho genérico", "V",
+      1.6f, 2.2f, 1.4f, 2.5f, STATUS_GOOD },
+    { COMP_LED, "LED Verde", "LED verde genérico", "V",
+      1.8f, 2.5f, 1.6f, 2.8f, STATUS_GOOD },
+    { COMP_LED, "LED Azul", "LED azul genérico", "V",
+      2.5f, 3.5f, 2.2f, 4.0f, STATUS_GOOD },
+    { COMP_LED, "LED Branco", "LED branco genérico", "V",
+      2.8f, 3.8f, 2.5f, 4.2f, STATUS_GOOD },
+
+    // --- ZENERS ---
+    { COMP_ZENER, "Zener 3V3", "Zener 3.3V", "V",
+      3.0f, 3.6f, 2.8f, 4.0f, STATUS_GOOD },
+    { COMP_ZENER, "Zener 5V1", "Zener 5.1V", "V",
+      4.6f, 5.6f, 4.2f, 6.0f, STATUS_GOOD },
+    { COMP_ZENER, "Zener 12V", "Zener 12V", "V",
+      10.8f, 13.2f, 9.5f, 15.0f, STATUS_GOOD },
+
+    // --- TRANSISTORES ---
+    { COMP_TRANSISTOR, "2N2222", "NPN 2N2222", "hFE",
+      80.0f, 300.0f, 50.0f, 400.0f, STATUS_GOOD },
+    { COMP_TRANSISTOR, "2N2907", "PNP 2N2907", "hFE",
+      80.0f, 300.0f, 50.0f, 400.0f, STATUS_GOOD },
+    { COMP_TRANSISTOR, "BC547", "NPN BC547", "hFE",
+      100.0f, 400.0f, 60.0f, 500.0f, STATUS_GOOD },
+    { COMP_TRANSISTOR, "BC557", "PNP BC557", "hFE",
+      100.0f, 400.0f, 60.0f, 500.0f, STATUS_GOOD },
+
+    // --- MOSFETs ---
+    { COMP_MOSFET, "2N7000", "N-MOSFET 2N7000", "Vgs",
+      1.0f, 3.0f, 0.8f, 3.5f, STATUS_GOOD },
+    { COMP_MOSFET, "IRLZ44N", "N-MOSFET IRLZ44N", "Vgs",
+      2.0f, 4.0f, 1.5f, 5.0f, STATUS_GOOD },
+
+    // --- INDUTORES ---
+    { COMP_INDUCTOR, "Ind 10µH", "Indutor 10µH", "µH",
+      8.0f, 15.0f, 6.0f, 20.0f, STATUS_GOOD },
+    { COMP_INDUCTOR, "Ind 47µH", "Indutor 47µH", "µH",
+      38.0f, 60.0f, 30.0f, 80.0f, STATUS_GOOD },
+    { COMP_INDUCTOR, "Ind 100µH", "Indutor 100µH", "µH",
+      80.0f, 130.0f, 60.0f, 180.0f, STATUS_GOOD },
+    { COMP_INDUCTOR, "Ind 470µH", "Indutor 470µH", "µH",
+      376.0f, 600.0f, 300.0f, 800.0f, STATUS_GOOD },
+
+    // --- RELÉS ---
+    { COMP_RELAY, "Relay 5V", "Relé 5V", "Ω",
+      60.0f, 100.0f, 50.0f, 120.0f, STATUS_GOOD },
+    { COMP_RELAY, "Relay 12V", "Relé 12V", "Ω",
+      200.0f, 400.0f, 180.0f, 500.0f, STATUS_GOOD },
+    { COMP_RELAY, "Relay 24V", "Relé 24V", "Ω",
+      800.0f, 1600.0f, 700.0f, 2000.0f, STATUS_GOOD },
+
+    // --- CIs ---
+    { COMP_IC, "NE555", "Timer NE555", "Ω",
+      100.0f, 200.0f, 80.0f, 300.0f, STATUS_GOOD },
+    { COMP_IC, "LM317", "Regulador LM317", "Ω",
+      100.0f, 200.0f, 80.0f, 300.0f, STATUS_GOOD },
+    { COMP_IC, "ATmega328", "MCU ATmega328", "Ω",
+      10000.0f, 20000.0f, 8000.0f, 30000.0f, STATUS_GOOD },
+};
+const uint8_t DB_DEFAULT_COUNT = sizeof(DB_DEFAULT) / sizeof(ComponentInfo);
 
 // ============================================================================
-// PARSER DE LINHA CSV
+// VARIÁVEIS DO BANCO DE DADOS
 // ============================================================================
-// Formato esperado: nome,categoria,value1,min1,max1,value2,pin1,pin2,pin3,desc,uso,esr
-static bool parseCSVLine(const char *line, ComponentDB &comp) {
-  // Buffer local para tokenização (strtok modifica a string)
-  char buffer[256];
-  strncpy(buffer, line, sizeof(buffer) - 1);
-  buffer[sizeof(buffer) - 1] = '\0';
-
-  // 1. Nome do componente
-  char *token = strtok(buffer, ",");
-  if (!token) return false;
-  strncpy(comp.name, token, sizeof(comp.name) - 1);
-  comp.name[sizeof(comp.name) - 1] = '\0';
-
-  // 2. Categoria
-  token = strtok(NULL, ",");
-  if (!token) return false;
-  comp.category = atoi(token);
-
-  // 3. Valor primário
-  token = strtok(NULL, ",");
-  if (!token) return false;
-  comp.value1 = atoi(token);
-
-  // 4. Valor mínimo
-  token = strtok(NULL, ",");
-  if (!token) return false;
-  comp.min1 = atoi(token);
-
-  // 5. Valor máximo
-  token = strtok(NULL, ",");
-  if (!token) return false;
-  comp.max1 = atoi(token);
-
-  // 6. Valor secundário
-  token = strtok(NULL, ",");
-  if (!token) return false;
-  comp.value2 = atoi(token);
-
-  // 7-9. Pinagem (3 bytes)
-  for (int i = 0; i < 3; i++) {
-    token = strtok(NULL, ",");
-    if (!token) return false;
-    comp.pinout[i] = atoi(token);
-  }
-
-  // 10. Descrição
-  token = strtok(NULL, ",");
-  if (!token) return false;
-  strncpy(comp.description, token, sizeof(comp.description) - 1);
-  comp.description[sizeof(comp.description) - 1] = '\0';
-
-  // 11. Uso comum
-  token = strtok(NULL, ",");
-  if (!token) return false;
-  strncpy(comp.common_use, token, sizeof(comp.common_use) - 1);
-  comp.common_use[sizeof(comp.common_use) - 1] = '\0';
-
-  // 12. ESR típico
-  token = strtok(NULL, ",");
-  if (!token) return false;
-  comp.typical_esr = atoi(token);
-
-  return true;
-}
+static ComponentDatabase db = { 0, { { 0 } } };
+static bool dbLoaded = false;
 
 // ============================================================================
-// INICIALIZAÇÃO DO SD CARD (HSPI)
+// INICIALIZAÇÃO
 // ============================================================================
-// A CYD usa pinos HSPI dedicados para o SD Card:
-//   SCK=18, MOSI=23, MISO=19, CS=5
-// Isso é separado do barramento VSPI usado pelo TFT_eSPI.
 bool db_init_sd() {
-  // Inicializa barramento HSPI para o SD Card
-  sdSPI.begin(PIN_SD_SCK, PIN_SD_MISO, PIN_SD_MOSI, PIN_SD_CS);
-
-  // Inicializa o cartão SD com frequência de 20MHz para performance
-  if (!SD.begin(PIN_SD_CS, sdSPI, 20000000)) {
-    LOG_SERIAL_F("ERRO: SD Card nao encontrado");
-    return false;
-  }
-
-  // Verificar tipo de cartão
-  uint8_t cardType = SD.cardType();
-  if (cardType == CARD_NONE) {
-    LOG_SERIAL_F("SD Card: Nenhum cartao detectado!");
-    return false;
-  }
-
-  // Log de informações do cartão
-  Serial.print(F("SD Card tipo: "));
-  switch (cardType) {
-    case CARD_MMC:  Serial.println(F("MMC")); break;
-    case CARD_SD:   Serial.println(F("SDSC")); break;
-    case CARD_SDHC: Serial.println(F("SDHC")); break;
-    default:        Serial.println(F("Desconhecido")); break;
-  }
-
-  uint64_t cardSize = SD.cardSize() / (1024 * 1024);
-  Serial.print(F("SD Card tamanho: "));
-  Serial.print((uint32_t)cardSize);
-  Serial.println(F(" MB"));
-
-  LOG_SERIAL_F("SD Card: OK");
-  return true;
+    db.count = 0;
+    dbLoaded = false;
+    return true;
 }
 
-// ============================================================================
-// CONSTRUÇÃO DO ÍNDICE EM RAM
-// ============================================================================
-// Percorre o CSV uma vez e registra o offset de início de cada categoria.
-// Com 520KB de RAM, podemos armazenar este índice facilmente.
 bool db_load_index() {
-  // Resetar índice
-  for (int i = 0; i < CAT_COUNT; i++) {
-    categoryIndex[i].fileOffset = 0;
-    categoryIndex[i].count = 0;
-  }
-
-  File dbFile = SD.open(DB_FILE_PATH, FILE_READ);
-  if (!dbFile) {
-    LOG_SERIAL_F("DB: Arquivo COMPBD.CSV nao encontrado!");
-    dbIndexLoaded = false;
-    return false;
-  }
-
-  char line_buffer[256];
-  size_t line_idx = 0;
-  uint32_t lineStart = 0;    // Posição do início da linha atual
-  uint32_t currentPos = 0;   // Posição atual no arquivo
-  int totalEntries = 0;
-
-  while (dbFile.available()) {
-    char c = dbFile.read();
-    currentPos++;
-
-    if (c == '\n' || c == '\r') {
-      if (line_idx > 0) {
-        line_buffer[line_idx] = '\0';
-
-        // Extrair categoria rapidamente (segundo campo após a primeira vírgula)
-        char *firstComma = strchr(line_buffer, ',');
-        if (firstComma) {
-          int cat = atoi(firstComma + 1);
-          if (cat >= 0 && cat < CAT_COUNT) {
-            // Se é a primeira entrada desta categoria, registrar offset
-            if (categoryIndex[cat].count == 0) {
-              categoryIndex[cat].fileOffset = lineStart;
-            }
-            categoryIndex[cat].count++;
-            totalEntries++;
-          }
+    if (sdCardPresent) {
+        if (sd_load_database()) {
+            dbLoaded = true;
+            return true;
         }
+    }
 
-        line_idx = 0;
-      }
-      lineStart = currentPos; // Próxima linha começa aqui
+    // Fallback: carregar banco padrão na RAM
+    db_load_default();
+    dbLoaded = true;
+    return true;
+}
+
+void db_load_default() {
+    db.count = DB_DEFAULT_COUNT;
+    for (int i = 0; i < DB_DEFAULT_COUNT && i < MAX_DB_COMPONENTS; i++) {
+        db.items[i] = DB_DEFAULT[i];
+    }
+    DBG_PRINTF("[DB] Banco padrão carregado (%d itens)\n", db.count);
+}
+
+// ============================================================================
+// OPERAÇÕES DE BANCO
+// ============================================================================
+int db_add(const ComponentInfo* info) {
+    if (db.count >= MAX_DB_COMPONENTS) return -1;
+    db.items[db.count++] = *info;
+    return db.count - 1;
+}
+
+const ComponentInfo* db_find_by_type(ComponentType type) {
+    for (int i = 0; i < db.count; i++) {
+        if (db.items[i].type == type) return &db.items[i];
+    }
+    return NULL;
+}
+
+int db_find_by_name(const char* name) {
+    for (int i = 0; i < db.count; i++) {
+        if (strcasestr(db.items[i].name, name) != NULL) return i;
+    }
+    return -1;
+}
+
+ComponentStatus db_judge(ComponentType type, float value) {
+    const ComponentInfo* info = db_find_by_type(type);
+    if (!info) return STATUS_NONE;
+
+    if (value >= info->minGood && value <= info->maxGood) {
+        return STATUS_GOOD;
+    } else if (value >= info->minSuspect && value <= info->maxSuspect) {
+        return STATUS_SUSPECT;
     } else {
-      if (line_idx < sizeof(line_buffer) - 1) {
-        line_buffer[line_idx++] = c;
-      }
+        return STATUS_BAD;
     }
-  }
-
-  // Processar última linha (se não terminar com \n)
-  if (line_idx > 0) {
-    line_buffer[line_idx] = '\0';
-    char *firstComma = strchr(line_buffer, ',');
-    if (firstComma) {
-      int cat = atoi(firstComma + 1);
-      if (cat >= 0 && cat < CAT_COUNT) {
-        if (categoryIndex[cat].count == 0) {
-          categoryIndex[cat].fileOffset = lineStart;
-        }
-        categoryIndex[cat].count++;
-        totalEntries++;
-      }
-    }
-  }
-
-  dbFile.close();
-
-  // Log do resultado
-  Serial.print(F("DB: Indice construido - "));
-  Serial.print(totalEntries);
-  Serial.println(F(" componentes"));
-
-  for (int i = 0; i < CAT_COUNT; i++) {
-    if (categoryIndex[i].count > 0) {
-      Serial.print(F("  Cat ")); Serial.print(i);
-      Serial.print(F(": ")); Serial.print(categoryIndex[i].count);
-      Serial.print(F(" entradas @ offset ")); Serial.println(categoryIndex[i].fileOffset);
-    }
-  }
-
-  dbIndexLoaded = true;
-  return true;
 }
 
-// ============================================================================
-// BUSCA DO MELHOR MATCH
-// ============================================================================
-// Otimizado para ESP32: usa o índice em RAM para pular direto para a
-// categoria relevante. Ainda percorre todas as entradas da categoria,
-// mas não precisa ler o arquivo inteiro.
-ComponentDB findBestMatch(uint8_t category, uint16_t measured_value1,
-                          uint16_t measured_value2, uint16_t measured_esr) {
-  ComponentDB bestMatch = {"", 0, 0, 0, 0, 0, {0xFF, 0xFF, 0xFF}, "", "", 0};
-  uint16_t smallest_diff = 0xFFFF;
-
-  File dbFile = SD.open(DB_FILE_PATH, FILE_READ);
-  if (!dbFile) {
-    LOG_SERIAL_F("DB Err: Nao foi possivel abrir COMPBD.CSV");
-    strncpy(bestMatch.name, "SD ERROR", sizeof(bestMatch.name) - 1);
-    return bestMatch;
-  }
-
-  // Se o índice está carregado, fazer seek para a posição da categoria
-  if (dbIndexLoaded && category < CAT_COUNT && categoryIndex[category].count > 0) {
-    dbFile.seek(categoryIndex[category].fileOffset);
-    LOG_SERIAL("DB: Seek direto para categoria");
-  }
-
-  char line_buffer[256];
-  size_t line_idx = 0;
-  int matchesChecked = 0;
-  int maxToCheck = dbIndexLoaded ? categoryIndex[category].count + 50 : 0xFFFF; // margem de segurança
-
-  while (dbFile.available() && matchesChecked < maxToCheck) {
-    char c = dbFile.read();
-
-    if (c == '\n' || c == '\r') {
-      if (line_idx > 0) {
-        line_buffer[line_idx] = '\0';
-        ComponentDB currentComp;
-
-        if (parseCSVLine(line_buffer, currentComp)) {
-          if (currentComp.category == category) {
-            matchesChecked++;
-
-            // Verificar se o valor medido está dentro da faixa
-            bool val1_match = (measured_value1 >= currentComp.min1 &&
-                               measured_value1 <= currentComp.max1);
-
-            // Verificar valor secundário (margem de 20%)
-            bool val2_match = true;
-            if (currentComp.value2 > 0 && measured_value2 > 0) {
-              uint16_t margin = currentComp.value2 / 5;
-              if (measured_value2 < (currentComp.value2 - margin) ||
-                  measured_value2 > (currentComp.value2 + margin)) {
-                val2_match = false;
-              }
-            }
-
-            if (val1_match && val2_match) {
-              uint16_t diff = abs((int)measured_value1 - (int)currentComp.value1);
-              if (diff < smallest_diff) {
-                smallest_diff = diff;
-                bestMatch = currentComp;
-              }
-            }
-          } else if (dbIndexLoaded && currentComp.category != category) {
-            // Se estamos usando o índice e já passamos da categoria, parar
-            if (matchesChecked > 0) break;
-          }
-        }
-        line_idx = 0;
-      }
-    } else {
-      if (line_idx < sizeof(line_buffer) - 1) {
-        line_buffer[line_idx++] = c;
-      }
+const char* db_status_string(ComponentStatus status) {
+    switch (status) {
+        case STATUS_GOOD:   return "BOM";
+        case STATUS_SUSPECT: return "SUSPEITO";
+        case STATUS_BAD:    return "RUIM";
+        default:            return "N/A";
     }
-  }
-
-  dbFile.close();
-  return bestMatch;
 }
 
-// ============================================================================
-// INFORMAÇÕES DE DEBUG
-// ============================================================================
-void printComponentInfo(const ComponentDB &comp, uint16_t measured, uint16_t esr) {
-  Serial.print(F("Name: "));       Serial.println(comp.name);
-  Serial.print(F("Category: "));   Serial.println(getCategoryName(comp.category));
-  Serial.print(F("Value: "));      Serial.println(measured);
-  Serial.print(F("Expected: "));   Serial.println(comp.value1);
-  Serial.print(F("Range: "));      Serial.print(comp.min1);
-  Serial.print(F("-"));            Serial.println(comp.max1);
-  Serial.print(F("ESR: "));        Serial.println(esr);
-  Serial.print(F("Typical ESR: ")); Serial.println(comp.typical_esr);
-  Serial.print(F("Description: ")); Serial.println(comp.description);
-  Serial.print(F("Use: "));        Serial.println(comp.common_use);
+uint16_t db_status_color(ComponentStatus status) {
+    switch (status) {
+        case STATUS_GOOD:   return UI_COLORS::SUCCESS;
+        case STATUS_SUSPECT: return UI_COLORS::WARNING;
+        case STATUS_BAD:    return UI_COLORS::DANGER;
+        default:           return UI_COLORS::UNKNOWN;
+    }
 }
 
-// ============================================================================
-// NOME DAS CATEGORIAS
-// ============================================================================
-const char* getCategoryName(uint8_t category) {
-  switch (category) {
-    case CAT_BJT_NPN:       return "BJT NPN";
-    case CAT_BJT_PNP:       return "BJT PNP";
-    case CAT_MOSFET_N:      return "MOSFET N";
-    case CAT_MOSFET_P:      return "MOSFET P";
-    case CAT_DIODE:         return "Diode";
-    case CAT_ZENER:         return "Zener";
-    case CAT_SCHOTTKY:      return "Schottky";
-    case CAT_LED:           return "LED";
-    case CAT_CAPACITOR:     return "Capacitor";
-    case CAT_RESISTOR:      return "Resistor";
-    case CAT_INDUCTOR:      return "Inductor";
-    case CAT_OPTOCOUPLER:   return "Optocoupler";
-    case CAT_CRYSTAL:       return "Crystal";
-    case CAT_POTENTIOMETER: return "Potentiometer";
-    case CAT_FUSE:          return "Fuse";
-    case CAT_VARISTOR:      return "Varistor";
-    case CAT_NTC:           return "NTC";
-    case CAT_TRIAC:         return "TRIAC";
-    case CAT_SCR:           return "SCR";
-    case CAT_REGULATOR:     return "Regulator";
-    case CAT_RELAY:         return "Relay";
-    case CAT_SENSOR:        return "Sensor";
-    case CAT_OTHER:         return "Other";
-    default:                return "Unknown";
-  }
+uint16_t db_component_color(ComponentType type) {
+    switch (type) {
+        case COMP_RESISTOR:    return UI_COLORS::RESISTOR;
+        case COMP_CAPACITOR:  return UI_COLORS::CAPACITOR;
+        case COMP_ELECTROLYTIC: return UI_COLORS::CAPACITOR;
+        case COMP_DIODE:      return UI_COLORS::DIODE;
+        case COMP_LED:       return UI_COLORS::DIODE;
+        case COMP_ZENER:     return UI_COLORS::WARNING;
+        case COMP_TRANSISTOR: return UI_COLORS::TRANSISTOR;
+        case COMP_MOSFET:    return UI_COLORS::TRANSISTOR;
+        case COMP_INDUCTOR:   return UI_COLORS::PRIMARY;
+        case COMP_RELAY:      return UI_COLORS::PRIMARY;
+        case COMP_IC:       return UI_COLORS::IC;
+        default:             return UI_COLORS::UNKNOWN;
+    }
+}
+
+int db_count() {
+    return db.count;
+}
+
+bool db_is_loaded() {
+    return dbLoaded;
 }
