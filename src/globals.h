@@ -3,7 +3,6 @@
 
 #include <Arduino.h>
 
-// Macro for optional serial debugging to save space
 #define SERIAL_DEBUG 0
 #if SERIAL_DEBUG
 #define LOG_SERIAL(x) Serial.println(F(x))
@@ -13,21 +12,24 @@
 #define LOG_BEGIN(x)
 #endif
 
-// Variáveis globais para estado da máquina
+#define HISTORY_SIZE 10
+#define MAX_MEASUREMENT_NAME 8
+
 extern enum AppState {
   STATE_SPLASH,
   STATE_MENU,
   STATE_MEASURING,
   STATE_THERMAL_PROBE,
   STATE_SETTINGS,
-  STATE_ABOUT
+  STATE_ABOUT,
+  STATE_HISTORY,
+  STATE_SCANNER,
+  STATE_STATS
 } currentAppState;
 
-// Variáveis globais para controle de tempo
 extern unsigned long previousMillis;
 extern unsigned long currentMillis;
 
-// Variáveis globais para status dos LEDs
 extern bool flashingBothLeds;
 extern bool flashingGreenLedSlow;
 extern bool flashingRedLedFast;
@@ -37,16 +39,38 @@ extern unsigned long ledFlashInterval;
 extern bool greenLedState;
 extern bool redLedState;
 
-// Variáveis globais para controle do buzzer
 extern unsigned long buzzerStartTime;
 extern unsigned long buzzerDuration;
 extern bool buzzerActive;
 
-// Variáveis globais para a sonda térmica
 extern float currentTemperature;
 
-// Variáveis globais para o menu
 extern int currentMenuItem;
 extern int totalMenuItems;
 
-#endif // GLOBALS_H
+struct MeasurementHistory {
+  char name[MAX_MEASUREMENT_NAME];
+  float value;
+  float temp;
+  bool isGood;
+};
+
+extern MeasurementHistory measurementHistory[HISTORY_SIZE];
+extern int historyIndex;
+extern int historyCount;
+
+struct Settings {
+  float offset1;
+  float offset2;
+  bool darkMode;
+  bool silentMode;
+  unsigned long timeoutDuration;
+  unsigned long totalMeasurements;
+  unsigned long faultyMeasurements;
+};
+extern Settings deviceSettings;
+
+void loadSettings();
+void saveSettings();
+
+#endif

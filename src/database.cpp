@@ -6,10 +6,7 @@
 
 // Arrays removidos. Agora os dados vêm do SD Card.
 
-// Função para processar uma linha do CSV e preencher o ComponentDB
 bool parseCSVLine(const char *line, ComponentDB &comp) {
-  // Exemplo de linha: BC547,1,110,100,120,300,1,2,3,BC547 - Transistor NPN
-  // geral,Amplificador chaveamento,0
   char buffer[150];
   strncpy(buffer, line, sizeof(buffer) - 1);
   buffer[sizeof(buffer) - 1] = '\0';
@@ -72,7 +69,6 @@ bool parseCSVLine(const char *line, ComponentDB &comp) {
   return true;
 }
 
-// Funções de exemplo (implementação completa necessária)
 ComponentDB findBestMatch(uint8_t category, uint16_t measured_value1,
                           uint16_t measured_value2, uint16_t measured_esr) {
   ComponentDB bestMatch = {"", 0, 0, 0, 0, 0, {0xFF, 0xFF, 0xFF}, "", "", 0};
@@ -88,7 +84,6 @@ ComponentDB findBestMatch(uint8_t category, uint16_t measured_value1,
   char line_buffer[150];
   size_t line_idx = 0;
 
-  // Lendo linha por linha
   while (dbFile.available()) {
     char c = dbFile.read();
     if (c == '\n' || c == '\r') {
@@ -96,8 +91,6 @@ ComponentDB findBestMatch(uint8_t category, uint16_t measured_value1,
         line_buffer[line_idx] = '\0';
         ComponentDB currentComp;
         if (parseCSVLine(line_buffer, currentComp)) {
-          // Verifica se a categoria bate (ou se a busca é genelica) e checa se
-          // valor bate na tolerância range
           if (currentComp.category == category) {
             if (measured_value1 >= currentComp.min1 &&
                 measured_value1 <= currentComp.max1) {
@@ -124,11 +117,45 @@ ComponentDB findBestMatch(uint8_t category, uint16_t measured_value1,
 }
 
 void printComponentInfo(const ComponentDB &comp, uint16_t measured,
-                        uint16_t esr) {
-  // Implementação necessária
+                         uint16_t esr) {
+  Serial.print(F("Name: "));
+  Serial.println(comp.name);
+  Serial.print(F("Category: "));
+  Serial.println(getCategoryName(comp.category));
+  Serial.print(F("Value: "));
+  Serial.println(measured);
+  Serial.print(F("Expected: "));
+  Serial.println(comp.value1);
+  Serial.print(F("Range: "));
+  Serial.print(comp.min1);
+  Serial.print(F("-"));
+  Serial.println(comp.max1);
+  Serial.print(F("ESR: "));
+  Serial.println(esr);
+  Serial.print(F("Typical ESR: "));
+  Serial.println(comp.typical_esr);
+  Serial.print(F("Description: "));
+  Serial.println(comp.description);
+  Serial.print(F("Use: "));
+  Serial.println(comp.common_use);
 }
 
 const char *getCategoryName(uint8_t category) {
-  // Implementação necessária
-  return "";
+  switch (category) {
+    case 1: return "Resistor";
+    case 2: return "Capacitor";
+    case 3: return "Inductor";
+    case 4: return "Diode";
+    case 5: return "LED";
+    case 6: return "Transistor NPN";
+    case 7: return "Transistor PNP";
+    case 8: return "Mosfet N";
+    case 9: return "Mosfet P";
+    case 10: return "Bridge Rect";
+    case 11: return "Optocoupler";
+    case 12: return "Relay";
+    case 13: return "Zener";
+    case 14: return "IC";
+    default: return "Unknown";
+  }
 }

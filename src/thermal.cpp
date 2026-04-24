@@ -18,7 +18,23 @@ unsigned long lastTempReadMillis = 0;
 const long tempReadInterval = 500; // Leitura a cada 500ms
 
 // Inicializa a sonda térmica
-void thermal_init() {}
+void thermal_init() {
+  pinMode(ONEWIRE_BUS_PIN, INPUT_PULLUP);
+  lastTempReadMillis = currentMillis;
+  currentTemperature = 25.0;
+  
+  tft.fillScreen(ILI9341_BLACK);
+  tft.setTextColor(ILI9341_GREEN, ILI9341_BLACK);
+  tft.setTextSize(2);
+  tft.setCursor(10, 10);
+  tft.println(F("Thermal Probe"));
+  tft.setTextSize(1);
+  tft.setCursor(10, 40);
+  tft.setTextColor(ILI9341_WHITE, ILI9341_BLACK);
+  tft.println(F("DS18B20 Sensor"));
+  tft.setCursor(10, 60);
+  tft.println(F("Reading temp..."));
+}
 
 // Manipula o estado da sonda térmica
 void thermal_handle() {
@@ -68,14 +84,32 @@ float read_temperature() {
 
 // Verifica alertas de temperatura e aciona LEDs/buzzer
 void check_temperature_alerts(float temp) {
+  static unsigned long lastAlertMillis = 0;
+  static unsigned long beepInterval = 2000;
+
   if (temp >= TEMP_DANGER_THRESHOLD) {
-    set_red_led(true); // LED vermelho fixo
-    play_long_beep();  // Beep longo
+    set_red_led(true);
+    beepInterval = 200;
+    if (currentMillis - lastAlertMillis >= beepInterval) {
+      lastAlertMillis = currentMillis;
+      play_beep(150);
+    }
   } else if (temp >= TEMP_HOT_THRESHOLD) {
-    flash_red_led_fast(); // LED vermelho piscando rápido
+    flash_red_led_fast();
+    beepInterval = 500;
+    if (currentMillis - lastAlertMillis >= beepInterval) {
+      lastAlertMillis = currentMillis;
+      play_beep(100);
+    }
+  } else if (temp >= TEMP_NORMAL_THRESHOLD) {
+    set_red_led(false);
+    beepInterval = 1000;
+    if (currentMillis - lastAlertMillis >= beepInterval) {
+      lastAlertMillis = currentMillis;
+      play_beep(50);
+    }
   } else {
     set_red_led(false);
-    // Se a temperatura voltar ao normal, parar o beep se estiver tocando
     stop_beep();
   }
 }

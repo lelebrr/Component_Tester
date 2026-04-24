@@ -6,16 +6,13 @@
 #include <Adafruit_ILI9341.h>
 #include <Arduino.h>
 
-// Declaração da instância (definida em main.cpp)
 extern Adafruit_ILI9341 tft;
 
-// Estrutura para um item de menu
 typedef struct {
   const char *text;
-  AppState targetState; // Estado para onde o menu leva
+  AppState targetState;
 } MenuItem;
 
-// Funções para manipulação do menu
 void menu_init();
 void menu_handle();
 void draw_menu();
@@ -24,5 +21,11 @@ void draw_settings_menu();
 void handle_settings_menu();
 void draw_settings_menu_with_highlights(int highlighted);
 void draw_about_screen();
+void draw_history();
+void handle_history();
+void draw_scanner();
+void handle_scanner();
+void draw_stats();
+void handle_stats();
 
-#endif // MENU_H
+#endif

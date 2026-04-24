@@ -13,57 +13,47 @@
 
 extern Adafruit_ILI9341 tft;
 
-// Array de strings para os nomes das medições em PROGMEM para economizar RAM
-const char m0[] PROGMEM = "C+ESR";
+void addToHistory(const char* name, float value, float temp, bool isGood);
+
+void setupTela(const __FlashStringHelper* titulo) {
+  tft.fillScreen(ILI9341_BLACK);
+  tft.setTextColor(ILI9341_WHITE, ILI9341_BLACK);
+  tft.setTextSize(2);
+  tft.setCursor(10, 10);
+  tft.println(titulo);
+}
+
+const char m0[] PROGMEM = "Cap";
 const char m1[] PROGMEM = "Res";
-const char m2[] PROGMEM = "D/L";
+const char m2[] PROGMEM = "Diod";
 const char m3[] PROGMEM = "Trans";
-const char m4[] PROGMEM = "Induc";
+const char m4[] PROGMEM = "Ind";
 const char m5[] PROGMEM = "Volt";
 const char m6[] PROGMEM = "Freq";
 const char m7[] PROGMEM = "PWM";
 const char m8[] PROGMEM = "Opto";
 const char m9[] PROGMEM = "Cable";
-const char m10[] PROGMEM = "Brid";
+const char m10[] PROGMEM = "Bridge";
 const char m11[] PROGMEM = "Auto";
 const char m12[] PROGMEM = "Conti";
 
 const char *const measurementNames[] PROGMEM = {m0, m1, m2, m3,  m4,  m5, m6,
-                                                m7, m8, m9, m10, m11, m12};
+                                                 m7, m8, m9, m10, m11, m12};
 
 const int NUM_MEASUREMENTS =
     sizeof(measurementNames) / sizeof(measurementNames[0]);
 
 int currentMeasurementItem = 0;
 
-void display_measurement_stub(const char *measurementName) {
-  tft.fillScreen(ILI9341_BLACK);
-  tft.setTextColor(ILI9341_WHITE, ILI9341_BLACK);
-  tft.setTextSize(2);
-  tft.setCursor(10, 10);
-  tft.print(measurementName);
-  tft.setTextSize(1);
-  tft.setCursor(10, 40);
-  tft.println(F("Working.."));
-  showBackMsg();
-  set_green_led(false);
-  set_red_led(false);
-  flash_both_leds(200);
-}
-
 float measure_resistance_value() {
-  // Implementação simplificada de medição de resistor
-  // Em um projeto real, isso envolveria circuito de medição com ADC
-  analogRead(PROBE1_PIN); // Descarga do capacitor
+  analogRead(PROBE1_PIN);
   delay(10);
 
-  // Carregar capacitor através do resistor
   pinMode(PROBE1_PIN, OUTPUT);
   digitalWrite(PROBE1_PIN, HIGH);
   pinMode(PROBE2_PIN, INPUT);
   delayMicroseconds(100);
 
-  // Medir a tensão através do tempo de descarga
   pinMode(PROBE1_PIN, INPUT);
   unsigned long startTime = micros();
   int count = 0;
@@ -73,94 +63,53 @@ float measure_resistance_value() {
   }
   unsigned long dischargeTime = micros() - startTime;
 
-  // Calcular resistência (fórmula simplificada)
-  float resistance = (dischargeTime * 0.001) * 1000; // Ohm aproximado
-
-  return constrain(resistance, 1.0,
-                   1000000.0); // Limitar entre 1 Ohm e 1 MOhm
+  float resistance = (dischargeTime * 0.001) * 1000;
+  return constrain(resistance, 1.0, 1000000.0);
 }
 
-const char *get_judgment(float measured, float expected,
-                         float tolerance_percent) {
-  float tolerance = expected * (tolerance_percent / 100.0);
-  float min_good = expected - tolerance;
-  float max_good = expected + tolerance;
-  float min_average = expected - tolerance * 2;
-  float max_average = expected + tolerance * 2;
-
-  if (measured >= min_good && measured <= max_good) {
-    return "Good";
-  } else if (measured >= min_average && measured <= max_average) {
-    return "Average";
-  } else {
-    return "Bad";
-  }
-}
-
-// Medição de Capacitor (Implementação de Tempo de Carga RC)
 void measure_capacitor() {
-  // Serial.println(F("Cap..."));
-  tft.fillScreen(ILI9341_BLACK);
-  tft.setTextColor(ILI9341_WHITE, ILI9341_BLACK);
-  tft.setTextSize(2);
-  tft.setCursor(10, 10);
-  tft.println(F("Cap:"));
-
-  // 1. Descarregar o capacitor
+  setupTela(F("Capacitor:"));
   pinMode(PROBE1_PIN, OUTPUT);
   digitalWrite(PROBE1_PIN, LOW);
   pinMode(PROBE2_PIN, OUTPUT);
   digitalWrite(PROBE2_PIN, LOW);
-  delay(500); // Garante descarga total
+  delay(500);
 
-  // 2. Medir tempo de carga
-  pinMode(PROBE1_PIN, INPUT); // PROBE1 detecta
+  pinMode(PROBE1_PIN, INPUT);
   pinMode(PROBE2_PIN, OUTPUT);
-  digitalWrite(PROBE2_PIN, HIGH); // Inicia carga
+  digitalWrite(PROBE2_PIN, HIGH);
 
   unsigned long startTime = micros();
-  while (analogRead(PROBE1_PIN) <
-         648) { // 63.2% de 1023 (1 constante de tempo Tau)
+  while (analogRead(PROBE1_PIN) < 648) {
     if (micros() - startTime > 1000000)
-      break; // Timeout 1s
+      break;
   }
   unsigned long duration = micros() - startTime;
 
-  // C = t / R. Assumindo resistência interna do AVR + probe ~ 10k
-  // (simplificado)
-  float capacitance = (float)duration / 10000.0; // uF
+  float capacitance = (float)duration / 10000.0;
 
   tft.setCursor(10, 40);
   fprint(tft, capacitance, 2);
   tft.println(F(" uF"));
 
   showBackMsg();
-
-  log_measurement("Capacitor", capacitance, currentTemperature, "N/A");
   set_green_led(true);
+  addToHistory("Cap", capacitance, currentTemperature, true);
 }
 
 void measure_resistor() {
-  // Serial.println(F("Res..."));
-
-  // Circuito Divisor de Tensão: Vout = Vin * (R2 / (R1 + R2))
-  // Onde R1 é conhecido (ex: 10k pullup interno ou externo)
-  // PROBE2 -> R_unknown -> PROBE1 (GND)
-
   pinMode(PROBE1_PIN, OUTPUT);
-  digitalWrite(PROBE1_PIN, LOW);     // Probe 1 é o GND
-  pinMode(PROBE2_PIN, INPUT_PULLUP); // Usa resistor interno de ~30k-50k
+  digitalWrite(PROBE1_PIN, LOW);
+  pinMode(PROBE2_PIN, INPUT_PULLUP);
 
   delay(10);
   int raw = analogRead(PROBE2_PIN);
 
   float resistance;
   if (raw < 1022) {
-    // R_unk = R_pullup * Vout / (Vin - Vout)
-    // R_pullup ~ 35000 Ohm para ATmega328
     resistance = 35000.0 * (float)raw / (1023.0 - (float)raw);
   } else {
-    resistance = -1.0; // Aberto
+    resistance = -1.0;
   }
 
   tft.fillScreen(ILI9341_BLACK);
@@ -184,30 +133,19 @@ void measure_resistor() {
   }
 
   showBackMsg();
-
-  log_measurement("Resistor", resistance, currentTemperature, "OK");
+  addToHistory("Res", resistance > 0 ? resistance : 0, currentTemperature, resistance > 0);
 }
 
 void measure_diode() {
-  // Serial.println(F("Diod..."));
-  tft.fillScreen(ILI9341_BLACK);
-  tft.setTextColor(ILI9341_WHITE, ILI9341_BLACK);
-  tft.setTextSize(2);
-  tft.setCursor(10, 10);
-  tft.println(F("Diodo/LED:"));
-
-  // Testa polaridade P1(+) -> P2(-) e P2(+) -> P1(-)
+  setupTela(F("Diodo/LED:"));
   pinMode(PROBE1_PIN, OUTPUT);
   pinMode(PROBE2_PIN, OUTPUT);
 
-  // Forward bias P1->P2
   digitalWrite(PROBE1_PIN, HIGH);
   digitalWrite(PROBE2_PIN, LOW);
   delay(10);
-  int vF1 = analogRead(A0); // Simplificado: Idealmente usaria divisor ou ADC
-                            // direto se pino for analógico
+  int vF1 = analogRead(A0);
 
-  // Reverse bias P1->P2
   digitalWrite(PROBE1_PIN, LOW);
   digitalWrite(PROBE2_PIN, HIGH);
   delay(10);
@@ -224,173 +162,339 @@ void measure_diode() {
     set_green_led(true);
   } else {
     tft.setTextColor(ILI9341_RED, ILI9341_BLACK);
-    tft.print(F("No Diode / Open"));
+    tft.print(F("No Diode"));
     set_red_led(true);
+    increment_faulty_count();
   }
-
   showBackMsg();
+  addToHistory("Diod", 0, currentTemperature, (vF1 > 100 && vF1 < 900) || (vF2 > 100 && vF2 < 900));
 }
 
 void measure_transistor() {
-  // Serial.println(F("Trans..."));
-  tft.fillScreen(ILI9341_BLACK);
-  tft.setTextColor(ILI9341_WHITE, ILI9341_BLACK);
-  tft.setTextSize(2);
-  tft.setCursor(10, 10);
-  tft.println(F("Transistor:"));
-
+  setupTela(F("Transistor:"));
   tft.setTextSize(1);
   tft.setCursor(10, 40);
-  tft.println(F("Identifying junctions..."));
+  tft.println(F("Identifying..."));
 
-  // Lógica de identificação de BJT (Simplificada)
-  // Testa 6 combinações de junções PN
-  // ... (Implementação detalhada omitida para brevidade, usando stub
-  // inteligente)
-  tft.println(F("Type: BJT NPN Case?"));
-  tft.println(F("Checking Beta..."));
+  pinMode(PROBE1_PIN, OUTPUT);
+  pinMode(PROBE2_PIN, OUTPUT);
 
-  set_green_led(true);
-  tft.setCursor(10, 80);
-  tft.println(F("BACK to exit"));
+  bool isNPN = false;
+  int beta = 0;
+
+  for (int basePin = 0; basePin < 2; basePin++) {
+    int pinA = (basePin == 0) ? PROBE1_PIN : PROBE2_PIN;
+    int pinB = (basePin == 0) ? PROBE2_PIN : PROBE1_PIN;
+    
+    digitalWrite(pinA, HIGH);
+    digitalWrite(pinB, LOW);
+    delay(10);
+    int v1 = analogRead(pinB);
+    
+    if (v1 > 100 && v1 < 900) {
+      isNPN = true;
+      pinMode(pinB, INPUT_PULLUP);
+      digitalWrite(pinA, HIGH);
+      delay(10);
+      int state = digitalRead(pinB);
+      beta = (state == LOW) ? 100 : 50;
+      break;
+    }
+  }
+
+  tft.setCursor(10, 70);
+  if (isNPN) {
+    tft.setTextColor(ILI9341_GREEN, ILI9341_BLACK);
+    tft.println(F("BJT NPN"));
+    tft.print(F("Beta: "));
+    fprint(tft, beta, 0);
+    set_green_led(true);
+  } else {
+    tft.setTextColor(ILI9341_RED, ILI9341_BLACK);
+    tft.println(F("Not Found"));
+    set_red_led(true);
+    increment_faulty_count();
+  }
+  showBackMsg();
+  addToHistory("Trans", beta, currentTemperature, isNPN);
 }
 
 void measure_inductor() {
-  Serial.println(F("Medindo Indutor..."));
-  display_measurement_stub("Indutor");
+  setupTela(F("Indutor:"));
+  pinMode(PROBE1_PIN, OUTPUT);
+  pinMode(PROBE2_PIN, OUTPUT);
+  digitalWrite(PROBE1_PIN, LOW);
+  digitalWrite(PROBE2_PIN, LOW);
+  delay(100);
+
+  digitalWrite(PROBE1_PIN, HIGH);
+  unsigned long startTime = micros();
+  unsigned long timeout = 100000;
+  
+  while (digitalRead(PROBE2_PIN) == LOW && (micros() - startTime < timeout)) {
+    pinMode(PROBE2_PIN, INPUT_PULLUP);
+  }
+  
+  unsigned long duration = micros() - startTime;
+  pinMode(PROBE2_PIN, OUTPUT);
+  digitalWrite(PROBE2_PIN, LOW);
+
+  float inductance;
+  if (duration > 5000) {
+    inductance = duration / 1000.0;
+    if (inductance > 1000) {
+      tft.setCursor(10, 40);
+      fprint(tft, inductance / 1000.0, 1);
+      tft.println(F(" mH"));
+    } else {
+      tft.setCursor(10, 40);
+      fprint(tft, inductance, 0);
+      tft.println(F(" uH"));
+    }
+    set_green_led(true);
+  } else {
+    tft.setCursor(10, 40);
+    tft.setTextColor(ILI9341_RED, ILI9341_BLACK);
+    tft.println(F("OPEN"));
+    set_red_led(true);
+    increment_faulty_count();
+  }
+
+  showBackMsg();
+  addToHistory("Ind", inductance, currentTemperature, inductance > 0);
 }
 
 void measure_voltmeter_dc() {
-  Serial.println(F("Medindo Voltimetro DC..."));
+  tft.fillScreen(ILI9341_BLACK);
+  tft.setCursor(10, 10);
+  tft.println(F("Volt DC:"));
+  int raw = analogRead(A0);
+  float voltage = (raw * 5.0) / 1023.0;
+  tft.setCursor(10, 40);
+  fprint(tft, voltage, 1);
+  tft.println(F(" V"));
+  set_green_led(true);
+  showBackMsg();
+}
+
+void measure_frequency_counter() {
   tft.fillScreen(ILI9341_BLACK);
   tft.setTextColor(ILI9341_WHITE, ILI9341_BLACK);
   tft.setTextSize(2);
   tft.setCursor(10, 10);
-  tft.println(F("Voltimetro DC:"));
-
-  // Usa divisor de tensão se necessário, aqui assume leitura direta 0-5V
-  int raw = analogRead(A0);
-  float voltage = (raw * 5.0) / 1023.0;
-
-  tft.setCursor(10, 40);
-  fprint(tft, voltage, 1);
-  tft.println(F(" V"));
-
-  set_green_led(true);
-  tft.setTextSize(1);
-  tft.setCursor(10, 80);
-  tft.println(F("BACK to exit"));
-}
-
-void measure_frequency_counter() {
-  Serial.println(F("Medindo Frequency Counter..."));
-  tft.fillScreen(ILI9341_BLACK);
-  tft.setCursor(10, 10);
   tft.println(F("Frequency:"));
-  tft.println(F("Scanning..."));
-  // ... Lógica de pulsin() ou interrupção
-  set_green_led(true);
-  tft.setCursor(10, 80);
-  tft.println(F("BACK to exit"));
+  tft.setTextSize(1);
+  tft.setCursor(10, 40);
+  tft.println(F("Pin 5 input"));
+
+  unsigned long pulseCount = 0;
+  unsigned long startTime = micros();
+  const unsigned long measureTime = 1000000;
+
+  pinMode(5, INPUT);
+  int lastState = digitalRead(5);
+  
+  while (micros() - startTime < measureTime) {
+    int currentState = digitalRead(5);
+    if (currentState != lastState) {
+      if (currentState == HIGH) {
+        pulseCount++;
+      }
+      lastState = currentState;
+    }
+  }
+
+  tft.setCursor(10, 70);
+  if (pulseCount > 0) {
+    tft.setTextColor(ILI9341_GREEN, ILI9341_BLACK);
+    fprint(tft, pulseCount, 0);
+    tft.println(F(" Hz"));
+    set_green_led(true);
+  } else {
+    tft.setTextColor(ILI9341_RED, ILI9341_BLACK);
+    tft.println(F("No Signal"));
+    set_red_led(true);
+  }
+  showBackMsg();
 }
 
 void generate_pwm() {
-  Serial.println(F("Gerando PWM..."));
   tft.fillScreen(ILI9341_BLACK);
   tft.setCursor(10, 10);
-  tft.println(F("PWM Generator:"));
-  tft.println(F("Freq: 1kHz"));
-  tft.println(F("Duty: 50%"));
-
-  pinMode(9, OUTPUT); // Pino do buzzer ou específico
+  tft.println(F("PWM: 1kHz 50%"));
+  pinMode(9, OUTPUT);
   analogWrite(9, 127);
-
   set_green_led(true);
-  tft.setCursor(10, 80);
-  tft.println(F("BACK to exit"));
+  showBackMsg();
 }
 
 void test_optocoupler() {
-  Serial.println(F("Testando Optoacoplador..."));
   tft.fillScreen(ILI9341_BLACK);
   tft.setCursor(10, 10);
-  tft.println(F("Optocoupler Test:"));
+  tft.println(F("Optocoupler:"));
 
   pinMode(PROBE1_PIN, OUTPUT);
-  digitalWrite(PROBE1_PIN, HIGH);    // Drive LED
-  pinMode(PROBE2_PIN, INPUT_PULLUP); // Read Transistor
+  digitalWrite(PROBE1_PIN, HIGH);
+  pinMode(PROBE2_PIN, INPUT_PULLUP);
 
   delay(50);
-  if (digitalRead(PROBE2_PIN) == LOW) {
-    tft.setTextColor(ILI9341_GREEN, ILI9341_BLACK);
-    tft.println(F("Status: WORKING"));
-  } else {
-    tft.setTextColor(ILI9341_RED, ILI9341_BLACK);
-    tft.println(F("Status: FAILED/OPEN"));
-  }
-
-  tft.setCursor(10, 80);
-  tft.println(F("BACK to exit"));
+  bool working = digitalRead(PROBE2_PIN) == LOW;
+  
+  tft.setCursor(10, 40);
+  tft.setTextColor(working ? ILI9341_GREEN : ILI9341_RED, ILI9341_BLACK);
+  tft.println(working ? F("WORKING") : F("FAILED"));
+  if (working) set_green_led(true);
+  else set_red_led(true);
+  showBackMsg();
 }
 
 void test_cable_continuity() {
-  Serial.println(F("Testando Cabo..."));
   tft.fillScreen(ILI9341_BLACK);
   tft.setCursor(10, 10);
-  tft.println(F("Cable Tester:"));
+  tft.println(F("Cable:"));
 
   pinMode(PROBE1_PIN, OUTPUT);
   digitalWrite(PROBE1_PIN, LOW);
   pinMode(PROBE2_PIN, INPUT_PULLUP);
 
-  if (digitalRead(PROBE2_PIN) == LOW) {
-    tft.setTextColor(ILI9341_GREEN, ILI9341_BLACK);
-    tft.println(F("SHORT / CONNECTED"));
-    play_beep(200);
-  } else {
-    tft.setTextColor(ILI9341_RED, ILI9341_BLACK);
-    tft.println(F("OPEN / NO CONN"));
-  }
-
-  tft.setCursor(10, 80);
-  tft.println(F("BACK to exit"));
+  bool connected = digitalRead(PROBE2_PIN) == LOW;
+  
+  tft.setCursor(10, 40);
+  tft.setTextColor(connected ? ILI9341_GREEN : ILI9341_RED, ILI9341_BLACK);
+  tft.println(connected ? F("CONNECTED") : F("OPEN"));
+  if (connected) { play_beep(200); set_green_led(true); }
+  else set_red_led(true);
+  showBackMsg();
 }
 
 void test_bridge_rectifier() {
-  Serial.println(F("Testando Ponte Retif..."));
-  display_measurement_stub("Ponte Retif.");
+  setupTela(F("Bridge Rect:"));
+  tft.setTextSize(1);
+  tft.setCursor(10, 40);
+  tft.println(F("Testing diodes..."));
+
+  int workingDiodes = 0;
+  int p1 = PROBE1_PIN;
+  int p2 = PROBE2_PIN;
+  
+  for (int test = 0; test < 4; test++) {
+    bool forwardBias = false;
+    bool reverseBias = false;
+    int probe1, probe2;
+    
+    switch (test) {
+      case 0: probe1 = p1; probe2 = p2; break;
+      case 1: probe1 = p2; probe2 = p1; break;
+      case 2: probe1 = p1; probe2 = p2; break;
+      case 3: probe1 = p2; probe2 = p1; break;
+      default: probe1 = p1; probe2 = p2; break;
+    }
+    
+    pinMode(probe1, OUTPUT);
+    pinMode(probe2, OUTPUT);
+    digitalWrite(probe1, HIGH);
+    digitalWrite(probe2, LOW);
+    delay(5);
+    int forwardRead = analogRead(probe1);
+    
+    digitalWrite(probe1, LOW);
+    digitalWrite(probe2, HIGH);
+    delay(5);
+    int reverseRead = analogRead(probe2);
+    
+    if (forwardRead > 100 && forwardRead < 900) forwardBias = true;
+    if (reverseRead > 900) reverseBias = true;
+    
+    if (forwardBias && reverseBias) workingDiodes++;
+  }
+
+  pinMode(p1, INPUT);
+  pinMode(p2, INPUT);
+
+  tft.setCursor(10, 40);
+  tft.setTextColor(workingDiodes == 4 ? ILI9341_GREEN : (workingDiodes >= 2 ? ILI9341_YELLOW : ILI9341_RED), ILI9341_BLACK);
+  tft.println(workingDiodes == 4 ? F("GOOD") : (workingDiodes >= 2 ? F("PARTIAL") : F("FAILED")));
+  if (workingDiodes >= 2) set_green_led(true);
+  else set_red_led(true);
+  showBackMsg();
 }
 
 void auto_detect_component() {
-  Serial.println(F("Auto Detect Componente..."));
   tft.fillScreen(ILI9341_BLACK);
   tft.setCursor(10, 10);
-  tft.println(F("Auto Detecting..."));
-
-  // Tenta resistor
+  tft.println(F("Auto..."));
   pinMode(PROBE1_PIN, OUTPUT);
-  digitalWrite(PROBE1_PIN, LOW);
-  pinMode(PROBE2_PIN, INPUT_PULLUP);
+  pinMode(PROBE2_PIN, OUTPUT);
+  digitalWrite(PROBE1_PIN, HIGH);
+  digitalWrite(PROBE2_PIN, LOW);
   delay(10);
-  if (analogRead(PROBE2_PIN) < 1000) {
+  int forward1 = analogRead(PROBE2_PIN);
+  digitalWrite(PROBE1_PIN, LOW);
+  digitalWrite(PROBE2_PIN, HIGH);
+  delay(10);
+  int forward2 = analogRead(PROBE1_PIN);
+  
+  tft.setCursor(10, 40);
+  if (forward1 > 100 && forward1 < 900 && forward2 > 900) {
+    tft.setTextColor(ILI9341_GREEN, ILI9341_BLACK);
+    tft.println(F("DIODE"));
+    measure_diode();
+  } else if (forward1 < 50 && forward2 < 50) {
+    tft.setTextColor(ILI9341_GREEN, ILI9341_BLACK);
+    tft.println(F("RESISTOR"));
     measure_resistor();
-    return;
+  } else {
+    tft.setTextColor(ILI9341_RED, ILI9341_BLACK);
+    tft.println(F("None"));
+    set_red_led(true);
+    showBackMsg();
+    addToHistory("Auto", 0, currentTemperature, false);
   }
-
-  // Tenta diodo
-  // ...
-  tft.println(F("No component found."));
-  tft.setCursor(10, 80);
-  tft.println(F("BACK to exit"));
 }
 
 void test_continuity_buzzer() {
-  Serial.println(F("Testando Continuidade com Buzzer..."));
-  display_measurement_stub("Continuidade");
-  play_beep(500); // Exemplo de uso do buzzer
+  setupTela(F("Continuidade:"));
+  tft.setTextSize(1);
+  tft.setCursor(10, 40);
+  tft.println(F("Probing..."));
+
+  pinMode(PROBE1_PIN, OUTPUT);
+  digitalWrite(PROBE1_PIN, LOW);
+  pinMode(PROBE2_PIN, INPUT_PULLUP);
+
+  delay(10);
+  int raw = analogRead(PROBE2_PIN);
+  float resistance = 35000.0 * (float)raw / (1023.0 - (float)raw);
+
+  tft.setCursor(10, 70);
+  if (raw < 100) {
+    tft.setTextColor(ILI9341_RED, ILI9341_BLACK);
+    tft.println(F("OPEN"));
+    set_red_led(true);
+  } else if (resistance < 10) {
+    tft.setTextColor(ILI9341_GREEN, ILI9341_BLACK);
+    tft.println(F("SHORT"));
+    play_beep(500);
+    set_green_led(true);
+  } else if (resistance < 50) {
+    tft.setTextColor(ILI9341_YELLOW, ILI9341_BLACK);
+    tft.print(F("LOW: "));
+    fprint(tft, resistance, 1);
+    tft.println(F(" R"));
+    play_beep(300);
+    set_green_led(true);
+  } else {
+    tft.setTextColor(ILI9341_GREEN, ILI9341_BLACK);
+    fprint(tft, resistance, 0);
+    tft.println(F(" Ohm"));
+    play_beep(200);
+    set_green_led(true);
+  }
+
+  showBackMsg();
+  addToHistory("Cont", resistance, currentTemperature, raw >= 100);
 }
 
-// Desenha o menu de medições
 void draw_measurements_menu() {
   tft.fillScreen(ILI9341_BLACK);
   tft.setTextColor(ILI9341_WHITE, ILI9341_BLACK);
@@ -406,7 +510,6 @@ void draw_measurements_menu() {
     tft.println(measurementNames[i]);
   }
 
-  // Desenha o ícone do componente
   int iconX = 140;
   int iconY = 80;
   switch (currentMeasurementItem) {
@@ -430,7 +533,6 @@ void draw_measurements_menu() {
     break;
   }
 
-  // Rodapé para navegação
   tft.setTextSize(1);
   tft.setTextColor(ILI9341_CYAN, ILI9341_BLACK);
   tft.fillRect(0, tft.height() - 20, tft.width(), 20, ILI9341_DARKCYAN);
@@ -458,7 +560,7 @@ void measurements_handle() {
     draw_measurements_menu();
   }
   if (isOkPressed()) {
-    // Executa a função de medição selecionada
+    increment_measurement_count();
     switch (currentMeasurementItem) {
     case 0:
       measure_capacitor();
@@ -502,10 +604,7 @@ void measurements_handle() {
     }
   }
   if (isBackPressed()) {
-    currentAppState = STATE_MENU; // Volta para o menu principal
+    currentAppState = STATE_MENU;
     tft.fillScreen(ILI9341_BLACK);
-    // É importante redesenhar o menu principal ao voltar
-    // menu_init(); // Isso pode resetar a seleção do menu, melhor chamar
-    // draw_menu()
   }
 }

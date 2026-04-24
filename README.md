@@ -1,190 +1,182 @@
 # Component Tester PRO v2.0
 
-Este é o projeto **Component Tester PRO v2.0** para Arduino Uno R3, desenvolvido com PlatformIO no VS Code. Ele visa ser um testador de componentes multifuncional com tela colorida, navegação por botões físicos, sonda térmica e logging em SD Card.
+Dispositivo testador de componentes eletrônicos para Arduino Uno R3 com tela TFT colorida, navegação por botões físicos, sonda térmica DS18B20, logging em SD Card e EEPROM para configurações persistentes.
 
-## 1. Visão Geral do Projeto
+## Hardware
 
-O Component Tester PRO v2.0 é um dispositivo projetado para testar uma variedade de componentes eletrônicos, fornecendo medições precisas e um julgamento automático (Good/Average/Bad). Ele se destaca pela interface de usuário intuitiva com gráficos pixel art e funcionalidades avançadas como sonda térmica portátil e registro de dados.
+| Componente | Especificação |
+|------------|---------------|
+| Microcontrolador | Arduino Uno R3 (ATmega328P) |
+| Display | TFT 2.8" ILI9341 SPI |
+| Armazenamento | Módulo Micro SD SPI |
+| Interface | 6 botões push (UP/DW/LF/RT/OK/BCK) |
+| Feedback | Buzzer 5V, LED Verde, LED Vermelho |
+| Sonda | DS18B20 waterproof |
+| Persistência | EEPROM interna |
 
-## 2. Hardware
+## Pinagem
 
-- **Microcontrolador:** Arduino Uno R3
-- **Display:** TFT 2.8" ILI9341 SPI (sem touch)
-- **Armazenamento:** Módulo Micro SD SPI
-- **Interface do Usuário:** 6 botões push táteis (Cima, Baixo, Esquerda, Direita, Selecionar, Voltar)
-- **Feedback:** Buzzer piezoativo 5V, LED Verde (status OK), LED Vermelho (status Erro)
-- **Sonda Térmica:** DS18B20 waterproof com cabo longo
-- **Probes:** 2 saídas para ponteiras (agulha e garra jacaré, troca manual)
-- **Componentes de Medição:** Resistores de precisão (3x 680 Ω 1%) e resistores de pull-up (3x 470 kΩ 1%) para o circuito de medição.
+| Pino | Função |
+|------|--------|
+| A0 | Probe 1 (+) |
+| A1 | Probe 2 (-) |
+| D2 | Botão UP |
+| D3 | Botão DOWN |
+| D4 | SD Card CS / DS18B20 |
+| D5 | Botão LEFT / Freq Input |
+| D6 | Botão RIGHT |
+| D7 | Botão OK |
+| D8 | Botão BACK |
+| D9 | Buzzer / PWM Output |
+| D10 | LED Verde |
+| D11 | LED Vermelho |
+| D12 | TFT CS |
+| D13 | TFT DC |
+| A2 | TFT RST |
+| A3 | DS18B20 Bus |
 
-### Pinagem Obrigatória:
-
-| Pino Arduino | Função                       |
-|--------------|------------------------------|
-| A0           | Probe 1 (+)                  |
-| A1           | Probe 2 (-)                  |
-| GND          | Terra comum                  |
-| D2           | Botão Cima (Up)              |
-| D3           | Botão Baixo (Down)           |
-| D5           | Botão Esquerda (Left)        |
-| D6           | Botão Direita (Right)        |
-| D7           | Botão Selecionar (OK/Enter)  |
-| D8           | Botão Voltar (Back/Esc)      |
-| D9           | Buzzer piezoativo 5V         |
-| D10          | LED Verde                    |
-| D11          | LED Vermelho / MOSI (SPI)    |
-| D12          | TFT CS / MISO (SPI)          |
-| D13          | TFT DC / SCK (SPI)           |
-| A2           | TFT RST                      |
-| D4           | SD Card CS / Sonda DS18B20   |
-
-*Nota: Todos os 6 botões usam `INPUT_PULLUP` e fecham para GND quando pressionados.*
-
-## 3. Software (PlatformIO)
-
-Este projeto é desenvolvido usando PlatformIO no VS Code. Certifique-se de ter o VS Code e a extensão PlatformIO instalados.
-
-### `platformio.ini`
-
-```ini
-[env:uno]
-platform = atmelavr
-board = uno
-framework = arduino
-lib_deps =
-    bodmer/TFT_eSPI@^2.5.43
-    arduino-libraries/SD
-    mathieucarbou/Encoder@^1.0.0
-    paulstoffregen/OneWire
-    milesburton/DallasTemperature
-    Bounce2
-build_flags = -Os
-monitor_speed = 115200
-```
-
-### Estrutura de Arquivos
+## Estrutura do Projeto
 
 ```
-Component-Tester-PRO/
-├── platformio.ini
-├── src/
-│   ├── main.cpp
-│   ├── config.h
-│   ├── globals.h
-│   ├── buttons.h
-│   ├── buttons.cpp
-│   ├── leds.h
-│   ├── leds.cpp
-│   ├── menu.h
-│   ├── menu.cpp
-│   ├── measurements.h
-│   ├── measurements.cpp
-│   ├── thermal.h
-│   ├── thermal.cpp
-│   ├── drawings.h
-│   ├── drawings.cpp
-│   ├── icons/
-│   │   ├── icon_resistor.h
-│   │   ├── icon_cap_ceramic.h
-│   │   ├── icon_cap_electrolytic.h
-│   │   ├── icon_diode.h
-│   │   ├── icon_led.h
-│   │   ├── icon_transistor_to92.h
-│   │   ├── icon_inductor.h
-│   │   └── icon_unknown.h
-│   ├── database.h
-│   ├── logger.h
-│   ├── logger.cpp
-│   ├── buzzer.h
-│   ├── buzzer.cpp
-│   └── utils.h
-│   └── utils.cpp
-├── include/
-│   └── TFT_eSPI/
-│       └── User_Setup.h
-└── data/                         // Pasta para arquivos SD (ex: LOG.TXT)
+src/
+├── main.cpp          - Setup e loop principal, EEPROM, histórico
+├── config.h          - Definições de pinos e constantes
+├── globals.h         - Variáveis globais, structs Settings e History
+├── buttons.cpp/h     - Sistema de botões com debounce
+├── leds.cpp/h        - Controle de LEDs
+├── buzzer.cpp/h      - Sistema de beep
+├── menu.cpp/h        - Navegação, menus e funcionalidades
+├── measurements.cpp/h - Funções de medição
+├── thermal.cpp/h     - Sonda DS18B20 com alertas
+├── drawings.cpp/h    - Ícones e telas
+├── database.cpp/h    - Busca de componentes no SD
+├── logger.cpp/h      - Logging SD Card
+└── utils.cpp/h       - Funções utilitárias
 ```
 
-## 4. Funcionalidades
+## Funcionalidades
 
-### Navegação
+### Menu Principal
 
-- **6 Botões Físicos:**
-    - `Up`/`Down`: Rolar menus ou ajustar valores.
-    - `Left`/`Right`: Ajustar valores ou navegar entre abas.
-    - `Select` (OK/Enter): Entrar em um menu ou confirmar uma ação.
-    - `Back` (Esc): Sair de um menu ou cancelar uma ação.
-- **Rodapé:** Sempre exibe a legenda dos botões para facilitar a navegação.
-- **Debounce:** Implementado para todos os botões para evitar leituras falsas.
+1. **Medir** - Menu de medições
+2. **Termica** - Sonda de temperatura DS18B20
+3. **Scanner** - Auto-detecção contínua
+4. **Historico** - Últimas 10 medições
+5. **Estatist** - Estatísticas de medições
+6. **Config** - Configurações
+7. **Sobre** - Informações do dispositivo
 
-### Desenhos dos Componentes
+### Medições Disponíveis (13 modos)
 
-- **Estilo Pixel Art:** Ícones realistas de componentes em baixa resolução (máx. 32x32 pixels, RGB565).
-- **Cores Reais:** Resistor bege com faixas EIA, capacitor cerâmico laranja/bege, eletrolítico azul escuro, diodo cinza com faixa prateada, LED transparente, transistor TO-92 preto, indutor marrom com bobina visível, etc.
-- **Feedback Visual:** Ícone grande exibido ao lado do valor medido, acompanhado de um julgamento (verde para Good, amarelo para Average, vermelho para Bad).
-
-### LEDs de Status (Verde e Vermelho)
-
-- **Verde Fixo:** Medição OK / Componente Good / Pronto para uso.
-- **Vermelho Fixo:** Componente Bad / Sobrecarga / Curto-circuito / Perigo térmico.
-- **Ambos Piscando Rápido:** Medição em andamento.
-- **Verde Piscando Lento:** Função Hold ativa.
-- **Vermelho Piscando Rápido + Buzzer:** Temperatura >80°C ou sobrecarga.
+| Função | Descrição | Histórico |
+|--------|-----------|-----------|
+| measure_capacitor | Capacitor + ESR via RC | Cap |
+| measure_resistor | Resistência via divisor tensão | Res |
+| measure_diode | Diodo/LED com polaridade | Diod |
+| measure_transistor | Identifica BJT NPN | Trans |
+| measure_inductor | Indutância via tempo resposta | Ind |
+| measure_voltmeter_dc | Tensão DC 0-5V | Volt |
+| measure_frequency_counter | Frequência 1Hz-1MHz (Pino 5) | Freq |
+| generate_pwm | PWM 1kHz 50% (Pino 9) | PWM |
+| test_optocoupler | Testa isolamento LED/Transistor | Opto |
+| test_cable_continuity | Continuidade de cabos | Cable |
+| test_bridge_rectifier | Testa 4 diodos | Bridge |
+| auto_detect_component | Detecção automática | Auto |
+| test_continuity_buzzer | Continuidade com beep | Cont |
 
 ### Sonda Térmica DS18B20
 
-- **Modo Dedicado:** Acessível via menu principal.
-- **Leitura Contínua:** Atualização a cada 500 ms.
-- **Uso:** O usuário encosta a sonda manualmente nos componentes.
-- **Alertas Visuais e Sonoros:**
-    - `Temp: XX°C – Normal` (verde)
-    - `Temp: XX°C – Quente! Cuidado` (amarelo)
-    - `Temp: XX°C – Muito Quente! Perigo` (laranja)
-    - `Temp: XX°C – PERIGO! DESLIGUE!` (vermelho + LED vermelho fixo + beep longo)
-- **Limites Configuráveis:** Definidos em `config.h`.
+- Leitura contínua a cada 500ms
+- **Beep progressivo por temperatura:**
+  - 70-90°C: Beep curto a cada 1s + LED piscando
+  - 90-110°C: Beep a cada 500ms + LED piscando rápido
+  - >110°C: Beep rápido a cada 200ms + LED fixo
 
-### Medições (com apenas 2 probes)
+### Configurações (EEPROM)
 
-- Capacitor + ESR + leakage + julgamento
-- Resistor
-- Diodo / LED / Zener
-- Transistor (NPN/PNP/MOSFET) – pinout manual
-- Indutor
-- Voltímetro DC
-- Frequency Counter
-- PWM Generator
-- Teste de optoacoplador
-- Cable Tester / continuidade estendida
-- Ponte retificadora
-- Auto Detect
-- Modo Continuidade com buzzer
+1. **Calibrar Probes** - Calibração dos probes
+2. **Modo Escuro** - Alterna cores do display
+3. **Modo Silencioso** - Desabilita beeps
+4. **Timeout** - Alterna 30s/60s
+5. **Salvar Cfg** - Salva configurações na EEPROM
 
-### Outras Funcionalidades (39 leves acumuladas)
+### Histórico de Medições
 
-- Modo repetido, beep progressivo, hold, comparador, contador de medições/defeituosos, modo escuro, silent mode, timeout, versão do firmware, etc.
+- Armazena últimas 10 medições
+- Exibe nome, valor e status (verde/vermelho)
+- Indicador de boas/ruins
 
-### Logging SD
+### Estatísticas
 
-- **Registro Automático:** Todo resultado de medição é salvo em `LOG.TXT`.
-- **Formato:** `Time: [millis]ms, Type: [tipo], Value: [valor], Temp: [temperatura], Judgment: [julgamento]`.
+- Total de medições realizadas
+- Total de componentes defeituosos
+- Taxa de falha percentual
+- Temperatura atual
 
-## 5. Requisitos de Código e Otimização
+### Scanner Automático
 
-- **Strings:** Todas as strings de texto usam a macro `F()` para economizar RAM.
-- **Ícones:** Armazenados em arquivos `.h` separados na pasta `src/icons/` como arrays `PROGMEM` RGB565.
-- **Comentários:** Código 100% comentado em português.
-- **Otimização:** Compilação com `-Os`, evitar a classe `String`, usar `char arrays`.
-- **Tratamento de Erros:** Completo para sobrecarga, curto-circuito, timeout.
-- **Splash Screen:** Exibe a versão "Component Tester PRO v2.0 – Leandro" na inicialização.
+- Pressiona OK para iniciar auto-detecção
+- Executa medição a cada 2 segundos
+- Pressiona OK novamente para parar
+- BACK para sair
 
-## 6. Como Compilar e Fazer Upload
+## Limites de Temperatura
 
-1.  Abra o projeto no VS Code com a extensão PlatformIO instalada.
-2.  Conecte seu Arduino Uno R3 ao computador.
-3.  No PlatformIO, clique no ícone de "Upload" (seta para a direita) na barra inferior para compilar e carregar o código para o Arduino.
-4.  Para monitorar a saída serial, clique no ícone de "Monitor Serial" (plug) na barra inferior.
+| Threshold | Valor | Comportamento |
+|-----------|-------|---------------|
+| NORMAL | < 70°C | Sem alerta |
+| HOT | 70-90°C | Beep 1s, LED piscando |
+| DANGER | 90-110°C | Beep 500ms, LED rápido |
+| CRITICAL | > 110°C | Beep 200ms, LED fixo |
 
----
+## Compilação
 
-**Desenvolvido por:** Manus AI (com base nas especificações de Leandro)
-**Data:** Mar 04, 2026
+```bash
+pio run              # Compila
+pio run --target upload    # Upload
+pio run --target monitor   # Monitor serial
+```
+
+## Uso de Memória
+
+- Flash: 96.1% (31,002 bytes)
+- RAM: 73.9% (1,513 bytes)
+
+## Novas Funções Exportadas
+
+```cpp
+// Histórico
+void addToHistory(const char* name, float value, float temp, bool isGood);
+
+// EEPROM
+void loadSettings();
+void saveSettings();
+
+// Estatísticas
+extern Settings deviceSettings;
+extern MeasurementHistory measurementHistory[HISTORY_SIZE];
+```
+
+## Estruturas de Dados
+
+```cpp
+struct MeasurementHistory {
+  char name[MAX_MEASUREMENT_NAME];  // "Cap", "Res", etc.
+  float value;                      // Valor medido
+  float temp;                        // Temperatura no momento
+  bool isGood;                       // true=verde, false=vermelho
+};
+
+struct Settings {
+  float offset1, offset2;           // Calibração
+  bool darkMode, silentMode;        // Modos
+  unsigned long timeoutDuration;    // Timeout em ms
+  unsigned long totalMeasurements;  // Total de medições
+  unsigned long faultyMeasurements; // Componentes ruins
+};
+```
+
+## Autores
+
+- **Leandro** - Desenvolvedor original
+- **v2.0** - Versão completa com todas funcionalidades
