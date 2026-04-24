@@ -8,6 +8,9 @@
 #include "thermal.h"
 #include "buzzer.h"
 #include "leds.h"
+#include "graphics.h"
+#include "display_globals.h"
+#include "database.h"
 
 // ============================================================================
 // CONSTANTES DE HARDWARE
@@ -199,7 +202,7 @@ void format_value(float value, const char* unit, char* out, uint8_t maxLen) {
         return;
     }
     
-    if (unit[0] == 'Ω') {
+    if (strcmp(unit, "Ω") == 0 || strcmp(unit, "ohm") == 0) {
         if (value >= 1000000.0f) {
             snprintf(out, maxLen, "%.2fM", value / 1000000.0f);
         } else if (value >= 1000.0f) {
@@ -207,11 +210,11 @@ void format_value(float value, const char* unit, char* out, uint8_t maxLen) {
         } else {
             snprintf(out, maxLen, "%.0f", value);
         }
-    } else if (unit[0] == 'µ' || (unit[0] == 'u' && unit[1] == 'F')) {
+    } else if (strcmp(unit, "µF") == 0 || strcmp(unit, "uF") == 0) {
         if (value >= 1000.0f) {
             snprintf(out, maxLen, "%.2fmF", value / 1000.0f);
         } else if (value >= 1.0f) {
-            snprintf(out, maxLen, "%.2fµF", value);
+            snprintf(out, maxLen, "%.2fuF", value);
         } else if (value >= 0.001f) {
             snprintf(out, maxLen, "%.2fnF", value * 1000.0f);
         } else {

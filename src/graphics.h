@@ -12,124 +12,57 @@
 #include <Arduino.h>
 #include <TFT_eSPI.h>
 #include "config.h"
+#include "globals.h"
 
 // ============================================================================
-// TIPOS DE COMPONENTES
+// ICONES VETORIAIS
 // ============================================================================
-enum ComponentType {
-    COMP_RESISTOR = 0,
-    COMP_CAPACITOR_CERAMIC = 1,
-    COMP_CAPACITOR_ELECTRO = 2,
-    COMP_DIODE = 3,
-    COMP_LED = 4,
-    COMP_TRANSISTOR_NPN = 5,
-    COMP_TRANSISTOR_PNP = 6,
-    COMP_MOSFET_N = 7,
-    COMP_MOSFET_P = 8,
-    COMP_INDUCTOR = 9,
-    COMP_CRYSTAL = 10,
-    COMP_FUSE = 11,
-    COMP_VARISTOR = 12,
-    COMP_POTENTIOMETER = 13,
-    COMP_OPTOACOPLER = 14,
-    COMP_UNKNOWN = 99
-};
+void draw_component_icon(IconType icon, int16_t x, int16_t y, uint16_t color);
+
+// Funcoes individuais para icones
+void draw_icon_resistor(int16_t x, int16_t y, uint16_t size, uint16_t color);
+void draw_icon_capacitor_ceramic(int16_t x, int16_t y, uint16_t size, uint16_t color);
+void draw_icon_capacitor_electro(int16_t x, int16_t y, uint16_t size, uint16_t color);
+void draw_icon_diode(int16_t x, int16_t y, uint16_t size, uint16_t color);
+void draw_icon_led(int16_t x, int16_t y, uint16_t size, uint16_t color);
+void draw_icon_transistor_npn(int16_t x, int16_t y, uint16_t size, uint16_t color);
+void draw_icon_transistor_pnp(int16_t x, int16_t y, uint16_t size, uint16_t color);
+void draw_icon_mosfet_n(int16_t x, int16_t y, uint16_t size, uint16_t color);
+void draw_icon_mosfet_p(int16_t x, int16_t y, uint16_t size, uint16_t color);
+void draw_icon_inductor(int16_t x, int16_t y, uint16_t size, uint16_t color);
+void draw_icon_crystal(int16_t x, int16_t y, uint16_t size, uint16_t color);
+void draw_icon_fuse(int16_t x, int16_t y, uint16_t size, uint16_t color);
+void draw_icon_varistor(int16_t x, int16_t y, uint16_t size, uint16_t color);
+void draw_icon_potentiometer(int16_t x, int16_t y, uint16_t size, uint16_t color);
+void draw_icon_optocoupler(int16_t x, int16_t y, uint16_t size, uint16_t color);
+void draw_icon_unknown(int16_t x, int16_t y, uint16_t size, uint16_t color);
+void draw_icon_multimeter(int16_t x, int16_t y, uint16_t size, uint16_t color);
+void draw_icon_temp(int16_t x, int16_t y, uint16_t size, uint16_t color);
+void draw_icon_history(int16_t x, int16_t y, uint16_t size, uint16_t color);
+void draw_icon_settings(int16_t x, int16_t y, uint16_t size, uint16_t color);
+void draw_icon_about(int16_t x, int16_t y, uint16_t size, uint16_t color);
+void draw_icon_warning(int16_t x, int16_t y, uint16_t size, uint16_t color);
+void draw_icon_voltage(int16_t x, int16_t y, uint16_t size, uint16_t color);
 
 // ============================================================================
-// STATUS DE MEDICAO
+// ELEMENTOS DA UI
 // ============================================================================
-enum MeasurementStatus {
-    STATUS_GOOD = 0,
-    STATUS_WARNING = 1,
-    STATUS_BAD = 2,
-    STATUS_INVALID = 3
-};
+void clear_screen();
+void draw_status_bar(const char* title = "Sondvolt", const char* subtitle = nullptr);
+void draw_footer(const char* left = nullptr, const char* right = nullptr);
+void draw_progress_bar(int16_t x, int16_t y, uint16_t w, uint16_t h, float percent, uint16_t color);
+void draw_status_indicator(MeasurementStatus status, int16_t x, int16_t y, uint16_t size);
+void draw_splash_screen();
 
 // ============================================================================
-// ICONES DO SISTEMA
+// CORES E UTILITARIOS DE DESENHO
 // ============================================================================
-
-// Prototipos das funcoes de icone
-void drawIconResistor(int16_t x, int16_t y, uint16_t size, uint16_t color);
-void drawIconCapacitorCeramic(int16_t x, int16_t y, uint16_t size, uint16_t color);
-void drawIconCapacitorElectro(int16_t x, int16_t y, uint16_t size, uint16_t color);
-void drawIconDiode(int16_t x, int16_t y, uint16_t size, uint16_t color);
-void drawIconLed(int16_t x, int16_t y, uint16_t size, uint16_t color);
-void drawIconTransistorNPN(int16_t x, int16_t y, uint16_t size, uint16_t color);
-void drawIconTransistorPNP(int16_t x, int16_t y, uint16_t size, uint16_t color);
-void drawIconMosfetN(int16_t x, int16_t y, uint16_t size, uint16_t color);
-void drawIconMosfetP(int16_t x, int16_t y, uint16_t size, uint16_t color);
-void drawIconInductor(int16_t x, int16_t y, uint16_t size, uint16_t color);
-void drawIconCrystal(int16_t x, int16_t y, uint16_t size, uint16_t color);
-void drawIconFuse(int16_t x, int16_t y, uint16_t size, uint16_t color);
-void drawIconVaristor(int16_t x, int16_t y, uint16_t size, uint16_t color);
-void drawIconPotentiometer(int16_t x, int16_t y, uint16_t size, uint16_t color);
-void drawIconOptocoupler(int16_t x, int16_t y, uint16_t size, uint16_t color);
-void drawIconUnknown(int16_t x, int16_t y, uint16_t size, uint16_t color);
-
-// ============================================================================
-// FUNCOES DE DESENHO
-// ============================================================================
-
-// Desenhar icone por tipo
-void drawComponentIcon(ComponentType type, int16_t x, int16_t y, uint16_t size);
-
-// Desenhar status
-void drawStatusIndicator(MeasurementStatus status, int16_t x, int16_t y, uint16_t size);
-
-// Desenhar simbolos graficos
-void draw resistorBody(int16_t x, int16_t y, uint16_t w, uint16_t color);
-void draw resistorBands(int16_t x, int16_t y, uint16_t w, uint8_t* colors, uint8_t count);
-void draw capacitorCeramicBody(int16_t x, int16_t y, uint16_t w, uint16_t color);
-void draw capacitorElectroBody(int16_t x, int16_t y, uint16_t w, uint16_t color);
-void draw capacitorLeads(int16_t x, int16_t y, uint16_t w);
-void draw diodeBody(int16_t x, int16_t y, uint16_t w, uint16_t color);
-void draw diodeSymbol(int16_t cx, int16_t cy, uint16_t size, uint16_t color);
-void draw ledBody(int16_t x, int16_t y, uint16_t w, uint16_t color);
-void draw ledSymbol(int16_t cx, int16_t cy, uint16_t size, uint16_t color);
-void draw transistorBody(int16_t x, int16_t y, uint16_t w, bool isNPN, uint16_t color);
-void draw transistorSymbol(int16_t cx, int16_t cy, uint16_t size, bool isNPN, uint16_t color);
-void draw mosfetBody(int16_t x, int16_t y, uint16_t w, bool isNChannel, uint16_t color);
-void draw mosfetSymbol(int16_t cx, int16_t cy, uint16_t size, bool isNChannel, uint16_t color);
-void draw inductorCoils(int16_t x, int16_t y, uint16_t w, uint16_t color);
-void draw crystalBody(int16_t x, int16_t y, uint16_t w, uint16_t color);
-void draw fuseBody(int16_t x, int16_t y, uint16_t w, uint16_t color);
-void draw varistorBody(int16_t x, int16_t y, uint16_t w, uint16_t color);
-void draw potentiometerBody(int16_t x, int16_t y, uint16_t w, uint16_t color);
-void draw optocouplerBody(int16_t x, int16_t y, uint16_t w, uint16_t color);
-void drawUnknownBody(int16_t x, int16_t y, uint16_t w, uint16_t color);
-
-// ============================================================================
-// BARRA DE STATUS
-// ============================================================================
-void drawStatusBar(const char* title);
-void updateStatusBar(const char* text);
-
-// ============================================================================
-// RODAPE
-// ============================================================================
-void drawFooter(const char* left, const char* right);
-void drawFooterIcon(uint8_t icon, int16_t x, int16_t y);
-
-// ============================================================================
-// ELEMENTOS UI
-// ============================================================================
-void drawButton(int16_t x, int16_t y, uint16_t w, uint16_t h, const char* label, bool pressed);
-void drawProgressBar(int16_t x, int16_t y, uint16_t w, uint16_t h, float percent, uint16_t color);
-void drawGauge(int16_t cx, int16_t cy, uint16_t radius, float value, float minVal, float maxVal, const char* unit);
-void drawValueBox(int16_t x, int16_t y, uint16_t w, uint16_t h, const char* label, const char* value, const char* unit);
-void drawWarningBox(const char* message);
-void drawErrorBox(const char* message);
-void drawConfirmBox(const char* message);
-
-// ============================================================================
-// SPLASH
-// ============================================================================
-void drawSplashScreen(void);
+uint16_t color_darker(uint16_t color, uint8_t shift);
+uint16_t rgb565(uint8_t r, uint8_t g, uint8_t b);
 
 // ============================================================================
 // INICIALIZACAO
 // ============================================================================
-void graphicsInit(TFT_eSPI* tft);
+void graphics_init(void);
 
 #endif // GRAPHICS_H

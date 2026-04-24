@@ -14,17 +14,27 @@
 // ============================================================================
 
 // Limiares de tensão perigosa (volts)
+#ifndef SAFETY_VOLTAGE_DANGER_AC
 #define SAFETY_VOLTAGE_DANGER_AC      50.0f       // Tensão AC considerada perigosa
+#endif
 #define SAFETY_VOLTAGE_220V_MIN    180.0f       // Mínimo para 220V
+#ifndef SAFETY_VOLTAGE_220V_MAX
 #define SAFETY_VOLTAGE_220V_MAX   250.0f       // Máximo para 220V
+#endif
 #define SAFETY_VOLTAGE_110V_MIN   90.0f        // Mínimo para 110V
+#ifndef SAFETY_VOLTAGE_110V_MAX
 #define SAFETY_VOLTAGE_110V_MAX   130.0f       // Máximo para 110V
+#endif
 
 // Limiares de tensão DC perigosa
+#ifndef SAFETY_VOLTAGE_DC_DANGER
 #define SAFETY_VOLTAGE_DC_DANGER  60.0f       // DC acima de 60V é perigoso
+#endif
 
 // Tempo de bloqueio após detecção perigosa (milissegundos)
+#ifndef SAFETY_LOCKOUT_MS
 #define SAFETY_LOCKOUT_MS         10000UL     // 10 segundos de bloqueio
+#endif
 #define SAFETY_LOCKOUT_WARNING_MS 5000UL    //Aviso 5 segundos antes de desbloquear
 
 // Limiar de curto-circuito (ohms)
@@ -35,14 +45,26 @@
 // ============================================================================
 
 // Cores de alerta (RGB565)
+#ifndef SAFETY_COLOR_DANGER
 #define SAFETY_COLOR_DANGER       0xF800      // Vermelho forte
+#endif
+#ifndef SAFETY_COLOR_WARNING
 #define SAFETY_COLOR_WARNING      0xFD20      // Laranja
+#endif
+#ifndef SAFETY_COLOR_SAFE
 #define SAFETY_COLOR_SAFE        0x07E0       // Verde
+#endif
+#ifndef SAFETY_COLOR_ALERT_BG
 #define SAFETY_COLOR_ALERT_BG     0x9800      // Vermelho escuro
+#endif
 
 // Mensagens de alerta
+#ifndef SAFETY_MSG_DANGER_220V
 #define SAFETY_MSG_DANGER_220V      " PERIGO! 220V DETECTADO "
+#endif
+#ifndef SAFETY_MSG_DANGER_HIGH
 #define SAFETY_MSG_DANGER_HIGH      " PERIGO! TENSÃO ALTA "
+#endif
 #define SAFETY_MSG_REMOVE          " REMOVA AS PONTESTE IMEDIATAMENTE "
 #define SAFETY_MSG_CONFIRM       " CONFIRME QUE INSTALOU FUSÍVEL E VARISTOR? "
 #define SAFETY_MSG_LOCKOUT        " EQUIPAMENTO BLOQUEADO "
@@ -54,13 +76,23 @@
 // ============================================================================
 
 // Frequências de alerta (Hz)
+#ifndef SAFETY_BEEP_DANGER
 #define SAFETY_BEEP_DANGER         2000        // Beep perigo (agudo)
+#endif
+#ifndef SAFETY_BEEP_WARNING
 #define SAFETY_BEEP_WARNING       1000        // Beep aviso (médio)
+#endif
+#ifndef SAFETY_BEEP_CONFIRM
 #define SAFETY_BEEP_CONFIRM      880         // Beep confirmação
+#endif
+#ifndef SAFETY_BEEP_OK
 #define SAFETY_BEEP_OK            523         // Beep OK (grave)
+#endif
 
 // Durações de beep (ms)
+#ifndef SAFETY_BEEP_DURATION_FAST
 #define SAFETY_BEEP_DURATION_FAST 100         // Beep rápido
+#endif
 #define SAFETY_BEEP_DURATION_SLOW 500         // Beep lento
 #define SAFETY_BEEP_DURATION_LONG 1000        // Beep longo
 

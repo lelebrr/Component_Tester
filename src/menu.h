@@ -6,38 +6,10 @@
 #define MENU_H
 
 #include "config.h"
+#include "globals.h"
 #include <Adafruit_GFX.h>
 
-// ============================================================================
-// ESTADO DA APLICAÇÃO (máquina de estados)
-// ============================================================================
-enum AppState {
-    STATE_SPLASH           = 0,
-    STATE_MENU              = 1,
-
-    // Modo Component Tester
-    STATE_MEASURE_RESISTOR  = 10,
-    STATE_MEASURE_CAPACITOR = 11,
-    STATE_MEASURE_DIODE     = 12,
-    STATE_MEASURE_TRANSISTOR = 13,
-    STATE_MEASURE_INDUCTOR   = 14,
-    STATE_MEASURE_IC         = 15,
-    STATE_MEASURE_GENERIC   = 19,
-
-    // Modo Multímetro
-    STATE_MULTIMETER        = 20,
-
-    // Ferramentas
-    STATE_THERMAL_PROBE     = 30,
-    STATE_SCANNER           = 31,
-    STATE_CALIBRATION       = 32,
-
-    // Configurações e Info
-    STATE_SETTINGS         = 40,
-    STATE_ABOUT             = 41,
-    STATE_HISTORY            = 42,
-    STATE_STATS              = 43
-};
+// AppState moved to globals.h
 
 // ============================================================================
 // ESTRUTURAS DE DADOS DO MENU
@@ -93,10 +65,10 @@ void menu_handle();
 void menu_draw();
 
 // Atualizar highlight do card selecionado
-void menu_updateSelection(int index);
+void menu_updateSelection(int8_t index);
 
 // Navegação entre cards
-void menu_navigate(int direction);
+void menu_navigate(int8_t direction);
 
 // Selecionar card atual
 void menu_select();
@@ -106,6 +78,9 @@ void menu_back();
 
 // Forçar redesenho do menu
 void menu_refresh();
+
+// Desenha dots de pagina
+void draw_page_dots(int8_t page, int8_t total);
 
 // ============================================================================
 // PROTÓTIPOS — SUB-MENUS
@@ -143,11 +118,7 @@ void calibration_handle();
 // PROTÓTIPOS — COMPONENTES DA UI
 // ============================================================================
 
-// Desenha a barra de status superior (hora, temp, SD, etc.)
-void draw_status_bar();
-
-// Desenha o rodapé com botões de navegação
-void draw_footer();
+// (declarations moved to graphics.h)
 
 // Desenha card do menu (com borda, ícone, label e highlight)
 void draw_menu_card(int x, int y, int w, int h,

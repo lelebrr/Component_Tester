@@ -7,6 +7,8 @@
 #include <Arduino.h>
 #include <stdint.h>
 #include <TFT_eSPI.h>
+#include "config.h"
+#include "globals.h"
 
 // ============================================================================
 // CONSTANTES
@@ -21,27 +23,14 @@
 #define MODE_AC       5
 #define MODE_GENERIC 99
 
-// Tipos de componentes
-#define COMP_RESISTOR   0
-#define COMP_CAPACITOR  1
-#define COMP_DIODE      2
-#define COMP_LED        3
-#define COMP_TRANSISTOR 4
-#define COMP_INDUCTOR   5
-#define COMP_OPEN      98
-#define COMP_SHORT     99
-#define COMP_GENERIC   100
-
-// Status de componente
-#define STATUS_GOOD    0
-#define STATUS_SUSPECT 1
-#define STATUS_BAD   2
-#define STATUS_OPEN 3
-#define STATUS_SHORT 4
-
 // Limiares
 #define THRESHOLD_SHORT    1.0f        // 1Ω
 #define THRESHOLD_OPEN   10000000.0f  // 10MΩ
+
+// Tipos de resultado de auto-detecção (uint8_t)
+#define COMP_SHORT     99
+#define COMP_OPEN      98
+#define COMP_GENERIC   100
 
 // ============================================================================
 // ESTRUTURA DE RESULTADO
@@ -57,11 +46,9 @@ typedef struct {
     char valueStr[24];
 } ComponentResult;
 
-// Variáveis externas
+// Variáveis externas (definidas em globals.cpp ou main.cpp)
 extern float probeOffsetR;
 extern float probeOffsetC;
-extern uint8_t currentAppState;
-extern unsigned long lastActivityMs;
 
 // ============================================================================
 // FUNÇÕES DE MEDIÇÃO

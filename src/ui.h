@@ -170,6 +170,6 @@ void ui_animate_fade_out(void);
 // INICIALIZACAO
 // ============================================================================
 
-void ui_init(TFT_eSPI* tft);
+void ui_init(void);
 
 #endif // UI_H

@@ -8,7 +8,6 @@
 
 #include <Arduino.h>
 #include "config.h"
-#include "database.h"
 
 // ============================================================================
 // ESTADO DA APLICACAO (maquina de estados)
@@ -16,8 +15,6 @@
 enum AppState {
     STATE_SPLASH           = 0,
     STATE_MENU              = 1,
-
-    // Modo Component Tester
     STATE_MEASURE_RESISTOR  = 10,
     STATE_MEASURE_CAPACITOR = 11,
     STATE_MEASURE_DIODE     = 12,
@@ -25,21 +22,32 @@ enum AppState {
     STATE_MEASURE_INDUCTOR   = 14,
     STATE_MEASURE_IC         = 15,
     STATE_MEASURE_GENERIC   = 19,
-
-    // Modo Multimestro
     STATE_MULTIMETER        = 20,
-
-    // Ferramentas
     STATE_THERMAL_PROBE     = 30,
     STATE_SCANNER           = 31,
     STATE_CALIBRATION       = 32,
-
-    // Configuracoes e Info
     STATE_SETTINGS         = 40,
     STATE_ABOUT             = 41,
     STATE_HISTORY            = 42,
     STATE_STATS              = 43
 };
+
+#include "types.h"
+#include "database.h"
+
+// ============================================================================
+// TIPOS DE ICONES — Definidos em types.h
+// ============================================================================
+
+// ============================================================================
+// TIPOS DE COMPONENTES — Definidos em types.h
+// ============================================================================
+
+// ============================================================================
+// STATUS DE MEDICAO / COMPONENTE — Definidos em types.h
+// ============================================================================
+
+typedef ComponentStatus MeasurementStatus;
 
 // Estado atual e anterior
 extern volatile AppState currentAppState;
@@ -92,17 +100,8 @@ extern bool sdCardError;
 extern bool tftInitialized;
 
 // ============================================================================
-// BOTOES
+// BOTOES — Definidos em buttons.h
 // ============================================================================
-enum Button {
-    BTN_NONE     = 0,
-    BTN_UP       = 1,
-    BTN_DOWN     = 2,
-    BTN_LEFT     = 3,
-    BTN_RIGHT    = 4,
-    BTN_OK       = 5,
-    BTN_BACK     = 6
-};
 
 // ============================================================================
 // MENSAGENS DE DISPLAY (FreeRTOS)

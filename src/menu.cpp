@@ -45,12 +45,12 @@ const MenuCard MEASURE_MENU_CARDS[] = {
 const uint8_t MEASURE_MENU_COUNT = sizeof(MEASURE_MENU_CARDS) / sizeof(MenuCard);
 
 const MenuCard SETTINGS_MENU_CARDS[] = {
-    { "Brilho",    100, ICON_SETTINGS,   C_YELLOW,  MENU_FLAG_NONE },
-    { "Som",       101, ICON_VOLTAGE, C_GREEN,  MENU_FLAG_NONE },
-    { "Auto-OFF",  102, ICON_HISTORY,  C_CYAN,   MENU_FLAG_NONE },
-    { "Temperat",  103, ICON_TEMP,    C_ORANGE,  MENU_FLAG_NONE },
-    { "Calibrar",  104, ICON_SETTINGS, C_PURPLE, MENU_FLAG_NONE },
-    { "Reset",    105, ICON_WARNING, C_RED,    MENU_FLAG_NONE },
+    { "Brilho",    (AppState)100, ICON_SETTINGS,   C_YELLOW,  MENU_FLAG_NONE },
+    { "Som",       (AppState)101, ICON_VOLTAGE, C_GREEN,  MENU_FLAG_NONE },
+    { "Auto-OFF",  (AppState)102, ICON_HISTORY,  C_CYAN,   MENU_FLAG_NONE },
+    { "Temperat",  (AppState)103, ICON_TEMP,    C_ORANGE,  MENU_FLAG_NONE },
+    { "Calibrar",  (AppState)104, ICON_SETTINGS, C_PURPLE, MENU_FLAG_NONE },
+    { "Reset",    (AppState)105, ICON_WARNING, C_RED,    MENU_FLAG_NONE },
 };
 const uint8_t SETTINGS_MENU_COUNT = sizeof(SETTINGS_MENU_CARDS) / sizeof(MenuCard);
 
@@ -90,7 +90,7 @@ void menu_draw() {
     
     int8_t page = currentCardIndex / CARDS_PER_PAGE;
     int8_t startIdx = page * CARDS_PER_PAGE;
-    int8_t cardsOnPage = min(CARDS_PER_PAGE, (int)MAIN_MENU_COUNT - startIdx);
+    int8_t cardsOnPage = min((int)CARDS_PER_PAGE, (int)MAIN_MENU_COUNT - (int)startIdx);
     
     // Grid layout
     int16_t cardW = (SCREEN_W - 40) / GRID_COLS;
@@ -141,7 +141,7 @@ void draw_menu_card(int16_t x, int16_t y, int16_t w, int16_t h,
     // Icon
     int16_t iconX = x + w / 2 - 16;
     int16_t iconY = y + h / 3;
-    draw_component_icon(card->iconType, iconX, iconY, card->color);
+    draw_component_icon((IconType)card->iconType, iconX, iconY, card->color);
     
     // Label
     tft.setTextColor(selected ? C_WHITE : C_LIGHT_GREY);
@@ -198,7 +198,7 @@ void menu_navigate(int8_t direction) {
     menuNeedsRedraw = true;
     
     // Visual feedback
-    led_flash_green(50);
+    led_flash_rgb(0, 255, 0, 50, 50);
 }
 
 void menu_select() {
@@ -224,7 +224,7 @@ void menu_select() {
     previousAppState = currentAppState;
     currentAppState = MAIN_MENU_CARDS[currentCardIndex].targetState;
     
-    led_flash_green(100);
+    led_flash_rgb(0, 255, 0, 100, 100);
     transition_slide_left();
 }
 
@@ -346,7 +346,7 @@ void settings_draw() {
         tft.fillRoundRect(x, y, cardW, cardH, 4, bg);
         tft.drawRoundRect(x, y, cardW, cardH, 4, C_WHITE);
         
-        draw_component_icon(SETTINGS_MENU_CARDS[i].iconType, x + 4, y + 8, C_WHITE);
+        draw_component_icon((IconType)SETTINGS_MENU_CARDS[i].iconType, x + 4, y + 8, C_WHITE);
         
         tft.setTextColor(C_WHITE);
         tft.setTextSize(1);
@@ -359,43 +359,6 @@ void settings_draw() {
 
 void settings_handle() {
     if (btn_just_pressed(BTN_BACK)) {
-        menu_back();
-    }
-}
-
-// ============================================================================
-// ABOUT SCREEN
-// ============================================================================
-
-void about_draw() {
-    clear_screen();
-    draw_status_bar("Sobre", "");
-    
-    // Icon
-    draw_component_icon(ICON_MULTIMETER, SCREEN_W/2 - 20, 50, C_GREEN);
-    
-    // Title
-    tft.setTextColor(C_WHITE);
-    tft.setTextSize(2);
-    tft.setTextDatum(TC_DATUM);
-    tft.setCursor(SCREEN_W/2, 100);
-    tft.print("SONDVOLT");
-    tft.setTextSize(1);
-    tft.setTextColor(C_GREEN);
-    tft.setCursor(SCREEN_W/2, 120);
-    tft.print("v3.1");
-    tft.setTextColor(C_LIGHT_GREY);
-    tft.setCursor(SCREEN_W/2, 140);
-    tft.print("ESP32-2432S028R");
-    tft.setCursor(SCREEN_W/2, 160);
-    tft.print("Build: " __DATE__);
-    tft.setTextDatum(TL_DATUM);
-    
-    draw_footer();
-}
-
-void about_handle() {
-    if (btn_just_pressed(BTN_BACK) || btn_just_pressed(BTN_OK)) {
         menu_back();
     }
 }
@@ -468,20 +431,43 @@ void transition_slide_right() {
     menuNeedsRedraw = true;
 }
 
-// ============================================================================
-// STATS, CALIBRATION, SCANNER PLACEHOLDERS
-// ============================================================================
+void draw_about_screen() {
+    clear_screen();
+    draw_status_bar("Sobre", "v3.1");
+    
+    tft.setTextColor(C_WHITE);
+    tft.setFreeFont(FM12);
+    tft.setTextDatum(MC_DATUM);
+    tft.drawString("SONDVOLT", SCREEN_W/2, 60);
+    
+    tft.setFreeFont(FM9);
+    tft.setTextColor(C_PRIMARY);
+    tft.drawString("Component Tester PRO", SCREEN_W/2, 90);
+    
+    tft.setTextColor(C_TEXT);
+    tft.setFreeFont(FONT_NORMAL);
+    tft.drawString("Hardware: ESP32 CYD", SCREEN_W/2, 130);
+    tft.drawString("Firmware: v3.1.0", SCREEN_W/2, 155);
+    tft.drawString("Author: lelebrr", SCREEN_W/2, 180);
+    
+    tft.setTextColor(C_TEXT_SECONDARY);
+    tft.setFreeFont(FONT_SMALL);
+    tft.drawString("github.com/lelebrr/SondVolt", SCREEN_W/2, 210);
+    
+    draw_footer("BACK", "");
+}
 
 void stats_draw() { draw_about_screen(); }
-void stats_handle() { menu_back(); }
+void stats_handle() { if(btn_just_pressed(BTN_BACK)) menu_back(); }
 
 void calibration_draw() { draw_about_screen(); }
-void calibration_handle() { menu_back(); }
+void calibration_handle() { if(btn_just_pressed(BTN_BACK)) menu_back(); }
 
 void scanner_draw() { draw_about_screen(); }
-void scanner_handle() { menu_back(); }
+void scanner_handle() { if(btn_just_pressed(BTN_BACK)) menu_back(); }
 
-void draw_about_screen() { about_draw(); }
+void about_draw() { draw_about_screen(); }
+void about_handle() { if(btn_just_pressed(BTN_BACK)) menu_back(); }
 
 // ============================================================================
 // MULTIMETER SCREEN - modo Multímetro AC/DC integrado

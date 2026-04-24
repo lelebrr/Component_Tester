@@ -8,10 +8,13 @@
 
 #include "multimeter.h"
 #include "config.h"
+#include "globals.h"
 #include "pins.h"
 #include "safety.h"
 #include "graphics.h"
 #include "buzzer.h"
+#include "display_globals.h"
+#include <Wire.h>
 
 // ============================================================================
 // VARIAVEIS GLOBAIS
@@ -66,9 +69,8 @@ void multimeter_adc_init() {
     pinMode(PIN_ADC_PROBE1, INPUT);
     pinMode(PIN_ADC_PROBE2, INPUT);
 
-    adc1_config_width(ADC_WIDTH_12BIT);
-    adc1_config_channel_atten(PIN_ADC_PROBE1, ADC_ATTEN_DB_11);
-    adc1_config_channel_atten(PIN_ADC_PROBE2, ADC_ATTEN_DB_11);
+    analogReadResolution(12);
+    // adc1_config_width and adc1_config_channel_atten are legacy ESP-IDF
 }
 
 bool multimeter_ina219_init() {
@@ -421,11 +423,23 @@ void multimeter_handle() {
 }
 
 void multimeter_update_display() {
-    drawValueBox(20, 60, SCREEN_W - 40, 60, "Value",
-                String(lastReading.value, 2).c_str(),
-                lastReading.unit);
+    // Desenha caixa de valor
+    tft.fillRoundRect(20, 60, SCREEN_W - 40, 60, 6, C_DARK_GREY);
+    tft.drawRoundRect(20, 60, SCREEN_W - 40, 60, 6, C_PRIMARY);
+    tft.setTextColor(C_TEXT_SECONDARY);
+    tft.setFreeFont(FONT_SMALL);
+    tft.setTextDatum(TL_DATUM);
+    tft.drawString("Value", 30, 65);
+    tft.setTextColor(C_WHITE);
+    tft.setFreeFont(FONT_VALUE);
+    tft.setTextDatum(MC_DATUM);
+    char valBuf[16];
+    dtostrf(lastReading.value, 6, 2, valBuf);
+    tft.drawString(valBuf, SCREEN_W/2 - 20, 95);
+    tft.setFreeFont(FONT_NORMAL);
+    tft.drawString(lastReading.unit, SCREEN_W - 60, 95);
 
-    drawStatusIndicator(
+    draw_status_indicator(
         lastReading.state == MSTATE_MEASURING ? STATUS_GOOD :
         lastReading.state == MSTATE_HIGH_VOLTAGE ? STATUS_BAD : STATUS_WARNING,
         SCREEN_W - 40, 70, 24
@@ -439,10 +453,10 @@ void multimeter_draw(const MultimeterReading* reading) {
     char fullStr[48];
     snprintf(fullStr, sizeof(fullStr), "%s %s", valueStr, reading->unit);
 
-    pTFT->setTextColor(C_PRIMARY);
-    pTFT->setTextDatum(MC_DATUM);
-    pTFT->setFreeFont(FONT_VALUE);
-    pTFT->drawString(fullStr, SCREEN_W/2, SCREEN_H/2);
+    tft.setTextColor(C_PRIMARY);
+    tft.setTextDatum(MC_DATUM);
+    tft.setFreeFont(FONT_VALUE);
+    tft.drawString(fullStr, SCREEN_W/2, SCREEN_H/2);
 }
 
 void multimeter_draw_value(float value, const char* unit, uint16_t color) {
@@ -452,11 +466,11 @@ void multimeter_draw_value(float value, const char* unit, uint16_t color) {
     char fullStr[48];
     snprintf(fullStr, sizeof(fullStr), "%s %s", valueStr, unit);
 
-    pTFT->fillRect(0, CONTENT_Y, SCREEN_W, CONTENT_H - 40);
-    pTFT->setTextColor(color);
-    pTFT->setTextDatum(MC_DATUM);
-    pTFT->setFreeFont(FONT_HEADER);
-    pTFT->drawString(fullStr, SCREEN_W/2, CONTENT_Y + CONTENT_H/2 - 20);
+    tft.fillRect(0, CONTENT_Y, SCREEN_W, CONTENT_H - 40, C_BLACK);
+    tft.setTextColor(color);
+    tft.setTextDatum(MC_DATUM);
+    tft.setFreeFont(FONT_HEADER);
+    tft.drawString(fullStr, SCREEN_W/2, CONTENT_Y + CONTENT_H/2 - 20);
 }
 
 void multimeter_draw_indicators(MultimeterMode mode, MeasurementRange range) {
@@ -479,34 +493,33 @@ void multimeter_draw_indicators(MultimeterMode mode, MeasurementRange range) {
         default: rangeStr = "---";
     }
 
-    pTFT->setTextColor(C_TEXT_SECONDARY);
-    pTFT->setTextDatum(TL_DATUM);
-    pTFT->setFreeFont(FONT_SMALL);
-    pTFT->drawString(modeStr, 10, SCREEN_H - FOOTER_H - 10);
+    tft.setTextColor(C_TEXT_SECONDARY);
+    tft.setTextDatum(TL_DATUM);
+    tft.setFreeFont(FONT_SMALL);
+    tft.drawString(modeStr, 10, SCREEN_H - FOOTER_H - 10);
 
-    pTFT->setTextDatum(TR_DATUM);
-    pTFT->drawString(rangeStr, SCREEN_W - 10, SCREEN_H - FOOTER_H - 10);
+    tft.setTextDatum(TR_DATUM);
+    tft.drawString(rangeStr, SCREEN_W - 10, SCREEN_H - FOOTER_H - 10);
 }
 
 void multimeter_draw_alert(const char* message, uint16_t color) {
-    pTFT->fillRect(SCREEN_W/4, SCREEN_H/4, SCREEN_W/2, SCREEN_H/2);
+    tft.fillRect(SCREEN_W/4, SCREEN_H/4, SCREEN_W/2, SCREEN_H/2, C_BLACK);
 
-    pTFT->setTextColor(color);
-    pTFT->setTextDatum(MC_DATUM);
-    pTFT->setFreeFont(FONT_NORMAL);
-    pTFT->drawString("ALERTA", SCREEN_W/2, SCREEN_H/4 + 20);
+    tft.setTextColor(color);
+    tft.setTextDatum(MC_DATUM);
+    tft.setFreeFont(FONT_NORMAL);
+    tft.drawString("ALERTA", SCREEN_W/2, SCREEN_H/4 + 20);
 
-    pTFT->setTextColor(C_TEXT);
-    pTFT->drawString(message, SCREEN_W/2, SCREEN_H/2);
+    tft.setTextColor(C_TEXT);
+    tft.drawString(message, SCREEN_W/2, SCREEN_H/2);
 }
-
 void multimeter_draw_history(const MeasurementHistory* hist) {
     uint16_t yStart = CONTENT_Y + 20;
     uint16_t barHeight = CONTENT_H - 40;
     uint16_t xStart = 20;
     uint16_t barWidth = SCREEN_W - 40;
 
-    pTFT->fillRect(xStart, yStart, barWidth, barHeight);
+    tft.fillRect(xStart, yStart, barWidth, barHeight, C_BLACK);
 
     uint8_t displayCount = min(hist->count, (uint8_t)10);
 
@@ -528,7 +541,7 @@ void multimeter_draw_history(const MeasurementHistory* hist) {
         uint16_t x = xStart + i * stepX;
         uint16_t y = yStart + barHeight - barH;
 
-        pTFT->fillRect(x + 1, y, stepX - 2, barH);
+        tft.fillRect(x + 1, y, stepX - 2, barH, C_PRIMARY);
     }
 }
 

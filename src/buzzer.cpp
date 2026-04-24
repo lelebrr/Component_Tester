@@ -12,14 +12,18 @@ static unsigned long buzzerDuration = 0;
 static unsigned int currentFreq = 0;
 
 void buzzer_init() {
+#if ESP_ARDUINO_VERSION_MAJOR >= 3
+    ledcAttach(PIN_BUZZER, LEDC_FREQ_BUZZER, LEDC_TIMER_BIT);
+#else
     ledcSetup(LEDC_CH_BUZZER, LEDC_FREQ_BUZZER, LEDC_TIMER_BIT);
     ledcAttachPin(PIN_BUZZER, LEDC_CH_BUZZER);
-    ledcWrite(LEDC_CH_BUZZER, 0);
+#endif
+    buzzer_no_tone();
     LOG_SERIAL_F("Buzzer OK");
 }
 
-void buzzer_beep(unsigned int freq) {
-    buzzer_beep_duration(freq, 100);
+void buzzer_beep(unsigned int freq, unsigned long durationMs) {
+    buzzer_beep_duration(freq, durationMs);
 }
 
 void buzzer_beep_duration(unsigned int freq, unsigned long durationMs) {
@@ -29,21 +33,32 @@ void buzzer_beep_duration(unsigned int freq, unsigned long durationMs) {
     buzzerActive = true;
     currentFreq = freq;
 
+#if ESP_ARDUINO_VERSION_MAJOR >= 3
+    ledcWriteTone(PIN_BUZZER, freq);
+#else
     ledcSetup(LEDC_CH_BUZZER, freq, LEDC_TIMER_BIT);
-    ledcAttachPin(PIN_BUZZER, LEDC_CH_BUZZER);
     ledcWrite(LEDC_CH_BUZZER, 128);
+#endif
 }
 
 void buzzer_tone(unsigned int freq) {
     if (deviceSettings.silentMode) return;
+#if ESP_ARDUINO_VERSION_MAJOR >= 3
+    ledcWriteTone(PIN_BUZZER, freq);
+#else
     ledcSetup(LEDC_CH_BUZZER, freq, LEDC_TIMER_BIT);
     ledcWrite(LEDC_CH_BUZZER, 128);
+#endif
     buzzerActive = true;
     currentFreq = freq;
 }
 
 void buzzer_no_tone() {
+#if ESP_ARDUINO_VERSION_MAJOR >= 3
+    ledcWrite(PIN_BUZZER, 0);
+#else
     ledcWrite(LEDC_CH_BUZZER, 0);
+#endif
     buzzerActive = false;
 }
 

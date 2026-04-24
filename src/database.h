@@ -7,34 +7,7 @@
 
 #include <stdint.h>
 
-// ============================================================================
-// TIPOS DE COMPONENTES
-// ============================================================================
-enum ComponentType {
-    COMP_RESISTOR    = 0,
-    COMP_CAPACITOR   = 1,
-    COMP_ELECTROLYTIC = 2,
-    COMP_DIODE       = 3,
-    COMP_LED         = 4,
-    COMP_ZENER       = 5,
-    COMP_TRANSISTOR  = 6,
-    COMP_MOSFET      = 7,
-    COMP_INDUCTOR   = 8,
-    COMP_RELAY       = 9,
-    COMP_IC         = 10,
-    COMP_COIL       = 11,
-    COMP_UNKNOWN     = 99
-};
-
-// ============================================================================
-// JULGAMENTO DE COMPONENTE
-// ============================================================================
-enum ComponentStatus {
-    STATUS_GOOD     = 0,   // Bom
-    STATUS_SUSPECT = 1,   // Suspeito (marginal)
-    STATUS_BAD     = 2,   // Ruim
-    STATUS_NONE    = 3    // Sem identificação
-};
+// Enums moved to globals.h
 
 // ============================================================================
 // ITEM DO BANCO DE DADOS
@@ -49,6 +22,12 @@ struct ComponentInfo {
     float minSuspect;   // Margem inferior para SUSPEITO
     float maxSuspect;   // Margem superior para SUSPEITO
     ComponentStatus defaultStatus;
+};
+
+struct ComponentDatabase {
+    ComponentInfo items[20];
+    uint8_t count;
+    bool loaded;
 };
 
 // ============================================================================

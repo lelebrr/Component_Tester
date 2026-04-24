@@ -59,6 +59,9 @@
 #define C_INDUCTOR            0xB2B2  // Couro
 #define C_CRYSTAL             0xCE59  // Quartzo
 #define C_UNKNOWN             0x7BEF  // Cinza
+#define C_GREY                0x8410  // Cinza claro
+#define C_DARK                0x18E3  // Cinza muito escuro
+#define C_DARK_GREY           0x2104  // Cinza escuro
 
 // ============================================================================
 // CONSTANTES DE TEMPO (millisegundos)
@@ -103,15 +106,24 @@
 #define ADC_REF_VOLTAGE       3.3f    // Tensao referencia (V)
 #define ADC_VREF             1.1f    // Tensao referencia interna (V)
 #define ADC_RESOLUTION         12       // Bits de resolucao
+#define ADC_SCALE            (ADC_REF_VOLTAGE / (float)ADC_MAX_VALUE)
 
 // ============================================================================
 // CONSTANTES ZMPT101B (Sensor Tensao AC)
 // ============================================================================
 #define ZMPT_SAMPLE_RATE     1000    // Amostragens por segundo
+#define ZMPT_SAMPLE_RATE_US  1000    // Microssegundos entre amostras
 #define ZMPT_NUM_SAMPLES     50      // Amostras para media
 #define ZMPT_ZERO_POINT      2048    // Ponto zero (meio do ADC)
 #define ZMPT_SCALE_FACTOR    311.0f  // Fator para 220V RMS
+#define ZMPT_SCALE           ZMPT_SCALE_FACTOR  // Alias
 #define ZMPT_FILTER_SIZE    5       // Tamanho filtro media movel
+#define ZMPT_CALIBRATION    1.0f
+
+// ============================================================================
+// SEGURANCA — Definicoes movidas para safety.h
+// ============================================================================
+// (ver safety.h para todas as constantes SAFETY_*)
 
 // ============================================================================
 // CONSTANTES INA219 (Sensor Corrente)
@@ -121,7 +133,7 @@
 #define INA219_RSHUNT        INA219_SHUNT // Alias
 #define INA219_MAX_AMPS       3.2f    // Corrente maxima (A)
 #define INA219_VBUS_MAX      32.0f   // Tensao maxima bus (V)
-#define INA219_CALIBRATION   0x199A // Valor calibracao
+#define INA_CALIBRATION      1.0f
 
 // ============================================================================
 // CALIBRACAO
@@ -161,13 +173,24 @@
 #define MULTI_AC_RANGE_200V  200.0f  // 200V range
 #define MULTI_AC_RANGE_600V  600.0f    // 600V range
 
+// Fontes GFX (TFT_eSPI) — usar fontes built-in do TFT_eSPI
+#include <TFT_eSPI.h>
+
+// Fontes GFXFF disponiveis via TFT_eSPI
+#define FM9   &FreeSans9pt7b
+#define FMB9  &FreeSansBold9pt7b
+#define FM12  &FreeSans12pt7b
+#define FMB12 &FreeSansBold12pt7b
+#define FMB   &FreeSansBold9pt7b
+#define FMBO  &FreeSansBold9pt7b // Alias para FMBO (Bold)
+
 // ============================================================================
-// FONTES
+// FONTES (Geral)
 // ============================================================================
-#define FONT_HEADER          4       // Titulos grandes
-#define FONT_NORMAL         2       // Texto normal
-#define FONT_SMALL         1       // Texto Pequeno
-#define FONT_VALUE         6       // Valores grandes
+#define FONT_HEADER          FMB12   // Titulos grandes
+#define FONT_NORMAL         FM9     // Texto normal
+#define FONT_SMALL         NULL    // Texto Pequeno (GLCD)
+#define FONT_VALUE         FMB12   // Valores grandes
 
 // ============================================================================
 // BUZZER (Sons)
@@ -204,6 +227,9 @@
 #define DEBUG_ENABLED        0       // 0=desligado, 1=ligado
 #define DEBUG_BAUD          115200   // Baud rate serial
 
+// Macro de log serial (usado em init de modulos)
+#define LOG_SERIAL_F(x)     Serial.println(F(x))
+
 #if DEBUG_ENABLED
   #define DBG(x)          Serial.println(x)
   #define DBGF(x)         Serial.print(F(x))
@@ -217,20 +243,52 @@
 #endif
 
 // ============================================================================
-// ARIBUTOS DE MEMORIA
+// ATRIBUTOS DE MEMORIA
 // ============================================================================
-#define PROGMEM              PROGMEM
+// No ESP32, PROGMEM ja e definido corretamente em pgmspace.h
+#include <pgmspace.h>
 #define RAM_ATTR            IRAM_ATTR
 #define NOINIT_ATTR         __attribute__((section(".noinit")))
+
+// ============================================================================
+// CONFIGURACAO DO BUZZER (LEDC)
+// ============================================================================
+#define LEDC_CH_BUZZER       0
+#define LEDC_FREQ_BUZZER     2000
+#define LEDC_TIMER_BIT       8
+
+// ============================================================================
+// CORES ADICIONAIS (RGB565)
+// ============================================================================
+#define C_WHITE              0xFFFF
+#define C_BLACK              0x0000
+#ifndef C_GREY
+#define C_GREY               0x8410
+#endif
+#define C_LIGHT_GREY         0xD69A
+#ifndef C_DARK_GREY
+#define C_DARK_GREY          0x4208
+#endif
+#define C_RED                0xF800
+#define C_GREEN              0x07E0
+#define C_BLUE               0x001F
+#define C_YELLOW             0xFFE0
+#define C_CYAN               0x07FF
+#define C_PURPLE             0x780F
+#define C_ORANGE             0xFD20
+#ifndef C_DARK
+#define C_DARK               0x2104
+#endif
+#define C_BORDER             C_GREY   // Cor padrao de borda
 
 // ============================================================================
 // COMPATIBILIDADE LEGACY
 // ============================================================================
 // Aliases para codigo existente
-#define PIN_TFT_CS           PIN_TFT_CS
-#define PIN_TFT_DC           PIN_TFT_DC
-#define PIN_TFT_RST          PIN_TFT_RST
-#define PIN_TFT_BL            PIN_TFT_BL
-#define PIN_SD_CS            PIN_SD_CS
+
+// Aliases de tempo para measurements.cpp
+#define UPDATE_DISP          TIME_REFRESH_DISP
+#define UPDATE_MEAS          TIME_REFRESH_MEAS
+#define AUTOOFF_TIME         TIME_BACKLIGHT_OFF
 
 #endif // CONFIG_H

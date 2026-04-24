@@ -30,7 +30,9 @@
 // ============================================================================
 
 #define ZMPT_SAMPLES_PER_CYCLE   64      // Amostras por ciclo (60Hz)
+#ifndef ZMPT_SAMPLE_RATE_US
 #define ZMPT_SAMPLE_RATE_US      260     // ~260us entre amostras (64 amostras em 16.67ms)
+#endif
 #define ZMPT_ZERO_VOLTAGE        2048    // Zero ideal do ADC (12-bit)
 #define ZMPT_VOLTS_PER_COUNT      0.146f  // Fator de conversão (220V / 1507 contagens)
 
@@ -42,7 +44,9 @@
 #define INA219_SHUNT_OHMS        0.1f    // Resistência do shunt
 #define INA219_MAX_AMPS          3.2f    // Corrente máxima
 #define INA219_MAX_VOLTS        26.0f   // Tensão máxima (32V - 0.4V)
+#ifndef INA219_CALIBRATION
 #define INA219_CALIBRATION        4096    // Valor de calibração
+#endif
 
 // ============================================================================
 // CONSTANTES DE MEDIÇÃO

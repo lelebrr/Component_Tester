@@ -9,41 +9,63 @@
 #include "graphics.h"
 #include "config.h"
 
-// Variavel global do display
-static TFT_eSPI* pTFT = nullptr;
+// Variavel global do display externa
+#include "display_globals.h"
+
+// ============================================================================
+// UTILITARIOS DE COR
+// ============================================================================
+uint16_t color_darker(uint16_t color, uint8_t shift) {
+    uint8_t r = (color >> 11) & 0x1F;
+    uint8_t g = (color >> 5) & 0x3F;
+    uint8_t b = color & 0x1F;
+    r = (r > shift) ? r - shift : 0;
+    g = (g > shift*2) ? g - shift*2 : 0; // G tem 6 bits
+    b = (b > shift) ? b - shift : 0;
+    return (r << 11) | (g << 5) | b;
+}
+
+uint16_t rgb565(uint8_t r, uint8_t g, uint8_t b) {
+    return ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3);
+}
 
 // ============================================================================
 // INICIALIZACAO
 // ============================================================================
-void graphicsInit(TFT_eSPI* tft) {
-    pTFT = tft;
+void graphics_init() {
+    tft.init();
+    tft.setRotation(1); // Paisagem (Landscape)
+    tft.fillScreen(C_BACKGROUND);
+    
+    // Configura PWM do Backlight se necessário
+    pinMode(PIN_TFT_BL, OUTPUT);
+    digitalWrite(PIN_TFT_BL, HIGH);
 }
 
 // ============================================================================
 // ICONE: RESISTOR
 // ============================================================================
 // Desenha um resistor com corpo e faixas coloridas
-void drawIconResistor(int16_t x, int16_t y, uint16_t size, uint16_t color) {
+void draw_icon_resistor(int16_t x, int16_t y, uint16_t size, uint16_t color) {
     uint16_t w = size;
     uint16_t h = size / 3;
-    uint16_t ledLen = size / 6;
+    uint16_t leadLen = size / 6;
 
-    pTFT->fillRect(x, y + h/2 - 2, ledLen, 4);
-    pTFT->fillRect(x + w - ledLen, y + h/2 - 2, ledLen, 4);
+    tft.fillRect(x, y + h/2 - 2, leadLen, 4, color);
+    tft.fillRect(x + w - leadLen, y + h/2 - 2, leadLen, 4, color);
 
-    uint16_t bodyX = x + ledLen;
-    uint16_t bodyW = w - ledLen * 2;
+    uint16_t bodyX = x + leadLen;
+    uint16_t bodyW = w - leadLen * 2;
 
-    pTFT->fillRoundRect(bodyX, y, bodyW, h, 4);
+    tft.fillRoundRect(bodyX, y, bodyW, h, 4, color);
 
-    uint8_t bandColors[] = {C_RESISTOR, C_RED, C_GREEN};
+    uint16_t bandColors[] = {C_RESISTOR, C_RED, C_GREEN};
     uint8_t numBands = 3;
     uint16_t bandW = bodyW / (numBands + 1);
 
     for(uint8_t i = 0; i < numBands; i++) {
         int16_t bx = bodyX + bandW * (i + 1) - bandW/2;
-        pTFT->fillRect(bx, y + 1, bandW - 1, h - 2);
-        pTFT->fillRect(bx, y + 1, bandW - 1, h - 2);
+        tft.fillRect(bx, y + 1, bandW - 1, h - 2, bandColors[i]);
     }
 }
 
@@ -51,33 +73,32 @@ void drawIconResistor(int16_t x, int16_t y, uint16_t size, uint16_t color) {
 // ICONE: CAPACITOR CERAMICO
 // ============================================================================
 // Desenha um capacitor ceramico (disco/lente)
-void drawIconCapacitorCeramic(int16_t x, int16_t y, uint16_t size, uint16_t color) {
+void draw_icon_capacitor_ceramic(int16_t x, int16_t y, uint16_t size, uint16_t color) {
     uint16_t leadLen = size / 5;
     uint16_t discR = size / 3;
 
-    pTFT->setFreeFont(FMB);
-    pTFT->fillRect(x + size/2 - leadLen/2, y, leadLen, size/4);
-    pTFT->fillRect(x + size/2 - leadLen/2, y + size - size/4, leadLen, size/4);
+    tft.fillRect(x + size/2 - leadLen/2, y, leadLen, size/4, color);
+    tft.fillRect(x + size/2 - leadLen/2, y + size - size/4, leadLen, size/4, color);
 
-    pTFT->fillCircle(x + size/2, y + size/2, discR);
+    tft.fillCircle(x + size/2, y + size/2, discR, color);
 }
 
 // ============================================================================
 // ICONE: CAPACITOR ELETROLITICO
 // ============================================================================
 // Desenha um capacitor eletrolitico (cilindro)
-void drawIconCapacitorElectro(int16_t x, int16_t y, uint16_t size, uint16_t color) {
+void draw_icon_capacitor_electro(int16_t x, int16_t y, uint16_t size, uint16_t color) {
     uint16_t w = size * 2 / 3;
     uint16_t h = size * 3 / 4;
     uint16_t leadLen = size / 4;
 
-    pTFT->fillRect(x + w/4, y, leadLen, size/6);
-    pTFT->fillRect(x + w/4 + w/2, y, leadLen, size/6);
+    tft.fillRect(x + w/4, y, leadLen, size/6, color);
+    tft.fillRect(x + w/4 + w/2, y, leadLen, size/6, color);
 
-    pTFT->fillRoundRect(x, y + size/6, w, h - size/6, 4);
+    tft.fillRoundRect(x, y + size/6, w, h - size/6, 4, color);
 
     for(uint8_t i = 0; i < 3; i++) {
-        pTFT->drawCircle(x + w/2, y + size/2 + i*4, w/4 - i*2);
+        tft.drawCircle(x + w/2, y + size/2 + i*4, w/4 - i*2, C_WHITE);
     }
 }
 
@@ -85,521 +106,292 @@ void drawIconCapacitorElectro(int16_t x, int16_t y, uint16_t size, uint16_t colo
 // ICONE: DIODO
 // ============================================================================
 // Desenha um diodo (seta + barra)
-void drawIconDiode(int16_t x, int16_t y, uint16_t size, uint16_t color) {
+void draw_icon_diode(int16_t x, int16_t y, uint16_t size, uint16_t color) {
     uint16_t cx = x + size/2;
     uint16_t cy = y + size/2;
     uint16_t triSize = size / 2;
 
-    pTFT->fillTriangle(cx, cy - triSize/2, cx, cy + triSize/2, cx + triSize/2, cy);
-    pTFT->fillRect(cx - triSize/2, cy - triSize/4, triSize/4, triSize/2);
+    tft.fillTriangle(cx, cy - triSize/2, cx, cy + triSize/2, cx + triSize/2, cy, color);
+    tft.fillRect(cx - triSize/2, cy - triSize/4, triSize/4, triSize/2, color);
 }
 
 // ============================================================================
 // ICONE: LED
 // ============================================================================
 // Desenha um LED com simbolo
-void drawIconLed(int16_t x, int16_t y, uint16_t size, uint16_t color) {
+void draw_icon_led(int16_t x, int16_t y, uint16_t size, uint16_t color) {
     uint16_t cx = x + size/2;
     uint16_t cy = y + size/2;
 
-    pTFT->fillCircle(cx, cy, size/3);
+    tft.fillCircle(cx, cy, size/3, color);
 
     int16_t triSize = size / 3;
-    pTFT->fillTriangle(cx, cy - triSize, cx, cy + triSize/2, cx + triSize, cy);
-    pTFT->fillRect(cx - triSize/2, cy - triSize/4, triSize/4, triSize/2);
-
-    pTFT->drawPixel(cx - 2, cy - triSize - 2);
-    pTFT->drawPixel(cx + 2, cy - triSize - 2);
-    pTFT->drawPixel(cx, cy - triSize - 4);
+    tft.fillTriangle(cx, cy - triSize, cx, cy + triSize/2, cx + triSize, cy, C_WHITE);
 }
 
 // ============================================================================
-// ICONE: TRANSISTOR NPN
-// ============================================================================
-// Desenha transistor NPN
-void drawIconTransistorNPN(int16_t x, int16_t y, uint16_t size, uint16_t color) {
-    drawIconTransistorPNP(x, y, size, color);
-}
-
-// ============================================================================
-// ICONE: TRANSISTOR PNP
-// ============================================================================
-// Desenha transistor PNP
-void drawIconTransistorPNP(int16_t x, int16_t y, uint16_t size, uint16_t color) {
+void draw_icon_transistor_npn(int16_t x, int16_t y, uint16_t size, uint16_t color) {
     uint16_t cx = x + size/2;
     uint16_t cy = y + size/2;
     uint16_t len = size / 2;
 
-    pTFT->drawLine(cx, cy - len, cx - len/2, cy);
-    pTFT->drawLine(cx, cy + len, cx - len/2, cy);
+    tft.drawLine(cx, cy - len, cx - len/2, cy, color);
+    tft.drawLine(cx, cy + len, cx - len/2, cy, color);
+    tft.drawLine(cx - len/2, cy, cx + len/2, cy, color);
+}
 
-    pTFT->drawLine(cx - len/2, cy, cx + len/2, cy);
-    pTFT->fillCircle(cx + len/2, cy, 3);
-
-    pTFT->drawLine(cx, cy, cx + len, cy - len/3);
-    pTFT->drawLine(cx, cy, cx + len, cy + len/3);
-
-    pTFT->fillTriangle(cx + len - 4, cy - len/3 - 2,
-                       cx + len - 4, cy - len/3 + 4,
-                       cx + len + 2, cy);
+void draw_icon_transistor_pnp(int16_t x, int16_t y, uint16_t size, uint16_t color) {
+    draw_icon_transistor_npn(x, y, size, color);
 }
 
 // ============================================================================
-// ICONE: MOSFET CANAL N
 // ============================================================================
-// Desenha MOSFET canal N
-void drawIconMosfetN(int16_t x, int16_t y, uint16_t size, uint16_t color) {
-    drawIconMosfetP(x, y, size, color);
-}
+// ICONE: MOSFET
+// ============================================================================
 
-// ============================================================================
-// ICONE: MOSFET CANAL P
-// ============================================================================
-// Desenha MOSFET canal P
-void drawIconMosfetP(int16_t x, int16_t y, uint16_t size, uint16_t color) {
+void draw_icon_mosfet_n(int16_t x, int16_t y, uint16_t size, uint16_t color) {
     uint16_t cx = x + size/2;
     uint16_t cy = y + size/2;
     uint16_t len = size / 2;
 
-    pTFT->drawLine(cx, cy - len, cx - len/2, cy);
-    pTFT->fillCircle(cx - len/2 - 2, cy, 3);
+    tft.drawLine(cx, cy - len, cx - len/2, cy, color);
+    tft.drawLine(cx - len/2, cy, cx + len/2, cy, color);
+    tft.fillRect(cx, cy - len/3 - 2, 4, 4, color);
+}
 
-    pTFT->drawLine(cx - len/2, cy, cx + len/2, cy);
-
-    pTFT->drawLine(cx, cy - len, cx, cy - len/3);
-    pTFT->fillRect(cx, cy - len/3 - 2, 4, 4);
-
-    pTFT->drawLine(cx, cy, cx + len/2, cy - len/3);
-    pTFT->fillTriangle(cx + len/2 + 2, cy - len/3,
-                       cx + len/2 + 2, cy - len/3 - 4,
-                       cx + len/2 - 2, cy - len/3 - 2);
-
-    pTFT->drawLine(cx, cy, cx + len/2, cy + len/3);
-    pTFT->fillTriangle(cx + len/2 + 2, cy + len/3,
-                       cx + len/2 + 2, cy + len/3 + 4,
-                       cx + len/2 - 2, cy + len/3 + 2);
+void draw_icon_mosfet_p(int16_t x, int16_t y, uint16_t size, uint16_t color) {
+    draw_icon_mosfet_n(x, y, size, color);
 }
 
 // ============================================================================
 // ICONE: INDUTOR
 // ============================================================================
 // Desenha um indutor (espirais)
-void drawIconInductor(int16_t x, int16_t y, uint16_t size, uint16_t color) {
+void draw_icon_inductor(int16_t x, int16_t y, uint16_t size, uint16_t color) {
     uint16_t cx = x + size/2;
     uint16_t cy = y + size/2;
     uint16_t len = size * 2 / 3;
 
-    pTFT->drawLine(x, cy, cx - len/2, cy);
-
-    for(uint8_t i = 0; i < 4; i++) {
-        int16_t arcY = cy - 6 + i * 4;
-        pTFT->drawArc(cx - len/3 + i*4, arcY, 4, 4, 180, 0);
+    tft.drawLine(x, cy, cx - len/2, cy, color);
+    for(uint8_t i = 0; i < 3; i++) {
+        tft.drawCircle(cx - len/2 + 5 + i*8, cy, 4, color);
     }
-
-    pTFT->drawLine(cx + len/2 + 4, cy, x + size, cy);
+    tft.drawLine(cx + len/2, cy, x + size, cy, color);
 }
 
 // ============================================================================
 // ICONE: CRISTAL
 // ============================================================================
 // Desenha um cristal (XTAL)
-void drawIconCrystal(int16_t x, int16_t y, uint16_t size, uint16_t color) {
+void draw_icon_crystal(int16_t x, int16_t y, uint16_t size, uint16_t color) {
     uint16_t w = size * 3 / 4;
     uint16_t h = size / 2;
     uint16_t cx = x + size/2;
     uint16_t cy = y + size/2;
 
-    pTFT->drawRect(x + (size-w)/2, y + (size-h)/2, w, h);
-
-    pTFT->drawLine(cx - w/4, cy - h/2, cx + w/4, cy);
-    pTFT->drawLine(cx - w/4, cy + h/2, cx + w/4, cy);
-
-    pTFT->drawLine(x, cy - h/2, x + w/6, cy - h/2);
-    pTFT->drawLine(x, cy + h/2, x + w/6, cy + h/2);
-
-    pTFT->drawLine(x + w - w/6, cy - h/2, x + w, cy - h/2);
-    pTFT->drawLine(x + w - w/6, cy + h/2, x + w, cy + h/2);
+    tft.drawRect(x + (size-w)/2, y + (size-h)/2, w, h, color);
+    tft.drawLine(cx - w/4, cy - h/4, cx + w/4, cy + h/4, color);
 }
 
 // ============================================================================
 // ICONE: FUSIVEL
 // ============================================================================
 // Desenha um fusivel (tubo com fio)
-void drawIconFuse(int16_t x, int16_t y, uint16_t size, uint16_t color) {
+void draw_icon_fuse(int16_t x, int16_t y, uint16_t size, uint16_t color) {
     uint16_t w = size * 2 / 3;
     uint16_t h = size / 3;
     uint16_t leadLen = size / 4;
 
-    pTFT->fillRect(x, y + size/2 - 1, leadLen, 2);
-    pTFT->fillRect(x + w - leadLen, y + size/2 - 1, leadLen, 2);
-
-    pTFT->drawRoundRect(x + leadLen, y + (size-h)/2, w - leadLen*2, h, 2);
-
-    pTFT->drawLine(x + leadLen + 2, y + size/2 - 1, x + w - leadLen - 2, y + size/2 + 1);
+    tft.fillRect(x, y + size/2 - 1, leadLen, 2, color);
+    tft.fillRect(x + w - leadLen, y + size/2 - 1, leadLen, 2, color);
+    tft.drawRoundRect(x + leadLen, y + (size-h)/2, w - leadLen*2, h, 2, color);
 }
 
 // ============================================================================
 // ICONE: VARISTOR
 // ============================================================================
 // Desenha um varistor (simbolo semicondutor)
-void drawIconVaristor(int16_t x, int16_t y, uint16_t size, uint16_t color) {
+void draw_icon_varistor(int16_t x, int16_t y, uint16_t size, uint16_t color) {
     uint16_t w = size * 2 / 3;
     uint16_t h = size / 2;
 
-    pTFT->fillRect(x, y + size/2 - 2, w, 4);
-
-    for(uint8_t i = 0; i < 3; i++) {
-        pTFT->drawLine(x + 4 + i*4, y + size/2 + 4,
-                       x + 8 + i*4, y + size - 4);
-    }
-
-    pTFT->drawRect(x, y + size/2 - h/2, w, h);
+    tft.drawRect(x, y + size/2 - h/2, w, h, color);
+    tft.drawLine(x, y + size/2 - h/2, x + w, y + size/2 + h/2, color);
 }
 
 // ============================================================================
 // ICONE: POTENCIOMETRO
 // ============================================================================
 // Desenha um potenciometro
-void drawIconPotentiometer(int16_t x, int16_t y, uint16_t size, uint16_t color) {
+void draw_icon_potentiometer(int16_t x, int16_t y, uint16_t size, uint16_t color) {
     uint16_t r = size / 3;
     uint16_t cx = x + size/2;
     uint16_t cy = y + size/2;
 
-    pTFT->fillCircle(cx, cy, r);
-
-    pTFT->fillRect(cx - 2, y, 4, size/3);
-
-    pTFT->drawLine(cx - r + 2, cy, cx + r - 2, cy);
-    pTFT->drawLine(cx, cy - r + 2, cx, cy + r - 2);
+    tft.fillCircle(cx, cy, r, color);
+    tft.drawLine(cx, cy, cx, y, C_WHITE);
 }
 
 // ============================================================================
 // ICONE: OPTOACOPLADOR
 // ============================================================================
 // Desenha um optoacoplador (LED + transistor)
-void drawIconOptocoupler(int16_t x, int16_t y, uint16_t size, uint16_t color) {
-    uint16_t sizeHalf = size / 2;
-
-    pTFT->fillCircle(x + sizeHalf/2, y + sizeHalf/2, sizeHalf/3);
-
-    int16_t triSize = sizeHalf / 3;
-    pTFT->fillTriangle(x + sizeHalf/2, y + sizeHalf/2 - triSize/2,
-                       x + sizeHalf/2, y + sizeHalf/2 + triSize/2,
-                       x + sizeHalf/2 + triSize/2, y + sizeHalf/2);
-
-    pTFT->drawRect(x + sizeHalf - 2, y + size/4, sizeHalf - 2, size/2);
-
-    pTFT->drawLine(x + sizeHalf + sizeHalf/2, y + sizeHalf/2,
-                   x + size - 4, y + sizeHalf/2);
-
-    pTFT->fillCircle(x + size - 4, y + sizeHalf/2, 3);
+void draw_icon_optocoupler(int16_t x, int16_t y, uint16_t size, uint16_t color) {
+    tft.drawRect(x, y, size, size, color);
+    tft.fillCircle(x + size/4, y + size/2, 4, color);
 }
 
 // ============================================================================
 // ICONE: COMPONENTE DESCONHECIDO
 // ============================================================================
 // Desenha um ponto de interrogacao
-void drawIconUnknown(int16_t x, int16_t y, uint16_t size, uint16_t color) {
+void draw_icon_unknown(int16_t x, int16_t y, uint16_t size, uint16_t color) {
     uint16_t cx = x + size/2;
     uint16_t cy = y + size/2;
     uint16_t r = size/3;
 
-    pTFT->fillCircle(cx, cy, r);
-    pTFT->setTextColor(C_BLACK);
-    pTFT->setTextDatum(MC_DATUM);
-    pTFT->drawString("?", cx, cy);
-    pTFT->setTextColor(C_WHITE);
+    tft.fillCircle(cx, cy, r, color);
+    tft.setTextColor(C_BLACK);
+    tft.setTextDatum(MC_DATUM);
+    tft.drawString("?", cx, cy);
 }
 
 // ============================================================================
-// FUNCAO PRINCIPAL: DESENHAR ICONE POR TIPO
-// ============================================================================
-void drawComponentIcon(ComponentType type, int16_t x, int16_t y, uint16_t size) {
-    switch(type) {
-        case COMP_RESISTOR:
-            drawIconResistor(x, y, size, C_RESISTOR);
-            break;
-        case COMP_CAPACITOR_CERAMIC:
-            drawIconCapacitorCeramic(x, y, size, C_CAPACITOR);
-            break;
-        case COMP_CAPACITOR_ELECTRO:
-            drawIconCapacitorElectro(x, y, size, C_CAPACITOR);
-            break;
-        case COMP_DIODE:
-            drawIconDiode(x, y, size, C_DIODE);
-            break;
-        case COMP_LED:
-            drawIconLed(x, y, size, C_LED);
-            break;
-        case COMP_TRANSISTOR_NPN:
-            drawIconTransistorNPN(x, y, size, C_TRANSISTOR);
-            break;
-        case COMP_TRANSISTOR_PNP:
-            drawIconTransistorPNP(x, y, size, C_TRANSISTOR);
-            break;
-        case COMP_MOSFET_N:
-            drawIconMosfetN(x, y, size, C_TRANSISTOR);
-            break;
-        case COMP_MOSFET_P:
-            drawIconMosfetP(x, y, size, C_TRANSISTOR);
-            break;
-        case COMP_INDUCTOR:
-            drawIconInductor(x, y, size, C_INDUCTOR);
-            break;
-        case COMP_CRYSTAL:
-            drawIconCrystal(x, y, size, C_CRYSTAL);
-            break;
-        case COMP_FUSE:
-            drawIconFuse(x, y, size, C_WHITE);
-            break;
-        case COMP_VARISTOR:
-            drawIconVaristor(x, y, size, C_DIODE);
-            break;
-        case COMP_POTENTIOMETER:
-            drawIconPotentiometer(x, y, size, C_WHITE);
-            break;
-        case COMP_OPTOACOPLER:
-            drawIconOptocoupler(x, y, size, C_ACCENT);
-            break;
-        case COMP_UNKNOWN:
-        default:
-            drawIconUnknown(x, y, size, C_UNKNOWN);
-            break;
+
+
+// Icones do Menu
+void draw_icon_multimeter(int16_t x, int16_t y, uint16_t size, uint16_t color) {
+    tft.drawRect(x + 4, y + 2, size - 8, size - 4, color);
+    tft.drawRect(x + 8, y + 6, size - 16, 10, color); // Screen
+    tft.fillCircle(x + size/2, y + size - 10, 6, color); // Dial
+}
+
+void draw_icon_temp(int16_t x, int16_t y, uint16_t size, uint16_t color) {
+    tft.fillRoundRect(x + size/2 - 2, y + 2, 4, size - 8, 2, color);
+    tft.fillCircle(x + size/2, y + size - 6, 6, color);
+}
+
+void draw_icon_history(int16_t x, int16_t y, uint16_t size, uint16_t color) {
+    tft.drawCircle(x + size/2, y + size/2, size/2 - 2, color);
+    tft.drawLine(x + size/2, y + size/2, x + size/2, y + size/4, color);
+    tft.drawLine(x + size/2, y + size/2, x + size/2 + size/4, y + size/2, color);
+}
+
+void draw_icon_settings(int16_t x, int16_t y, uint16_t size, uint16_t color) {
+    tft.drawCircle(x + size/2, y + size/2, size/4, color);
+    for(int i=0; i<8; i++) {
+        float a = i * 45 * PI / 180;
+        tft.drawLine(x + size/2 + cos(a)*size/4, y + size/2 + sin(a)*size/4,
+                    x + size/2 + cos(a)*size/2, y + size/2 + sin(a)*size/2, color);
     }
 }
 
-// ============================================================================
-// STATUS INDICATOR
-// ============================================================================
-void drawStatusIndicator(MeasurementStatus status, int16_t x, int16_t y, uint16_t size) {
-    uint16_t color;
-    switch(status) {
-        case STATUS_GOOD:
-            color = C_GREEN;
-            break;
-        case STATUS_WARNING:
-            color = C_YELLOW;
-            break;
-        case STATUS_BAD:
-            color = C_RED;
-            break;
-        default:
-            color = C_GREY;
-    }
-
-    pTFT->fillCircle(x + size/2, y + size/2, size/2 - 1);
-    pTFT->drawCircle(x + size/2, y + size/2, size/2 - 1);
-
-    pTFT->setTextColor(C_BLACK);
-    pTFT->setTextDatum(MC_DATUM);
-    pTFT->setFreeFont(FMB);
-
-    if(status == STATUS_GOOD) {
-        pTFT->drawString("OK", x + size/2, y + size/2);
-    } else if(status == STATUS_WARNING) {
-        pTFT->drawString("!", x + size/2, y + size/2);
-    } else if(status == STATUS_BAD) {
-        pTFT->drawString("X", x + size/2, y + size/2);
-    }
+void draw_icon_about(int16_t x, int16_t y, uint16_t size, uint16_t color) {
+    tft.drawCircle(x + size/2, y + size/2, size/2 - 2, color);
+    tft.fillCircle(x + size/2, y + size/4 + 2, 2, color);
+    tft.fillRect(x + size/2 - 1, y + size/2 - 2, 2, size/3, color);
 }
 
-// ============================================================================
-// BARRA DE STATUS
-// ============================================================================
-void drawStatusBar(const char* title) {
-    pTFT->fillRect(0, 0, SCREEN_W, STATUS_BAR_H);
-
-    pTFT->setTextColor(C_TEXT);
-    pTFT->setTextDatum(ML_DATUM);
-    pTFT->setFreeFont(FMB);
-    pTFT->drawString(title, 4, STATUS_BAR_H/2);
-
-    pTFT->drawLine(0, STATUS_BAR_H - 1, SCREEN_W, STATUS_BAR_H - 1);
+void draw_icon_warning(int16_t x, int16_t y, uint16_t size, uint16_t color) {
+    tft.drawTriangle(x + size/2, y + 2, x + 2, y + size - 2, x + size - 2, y + size - 2, color);
+    tft.fillRect(x + size/2 - 1, y + size/3, 2, size/3, color);
+    tft.fillCircle(x + size/2, y + size - 6, 2, color);
 }
 
-void updateStatusBar(const char* text) {
-    pTFT->fillRect(0, 0, SCREEN_W, STATUS_BAR_H);
-    pTFT->setTextColor(C_TEXT);
-    pTFT->setTextDatum(ML_DATUM);
-    pTFT->setFreeFont(FMB);
-    pTFT->drawString(text, 4, STATUS_BAR_H/2);
+void draw_icon_voltage(int16_t x, int16_t y, uint16_t size, uint16_t color) {
+    tft.drawLine(x + size/2, y + 2, x + size/4, y + size/2, color);
+    tft.drawLine(x + size/4, y + size/2, x + size/2 + 2, y + size/2 - 2, color);
+    tft.drawLine(x + size/2 + 2, y + size/2 - 2, x + size/2 - 2, y + size - 2, color);
 }
 
-// ============================================================================
-// RODAPE
-// ============================================================================
-void drawFooter(const char* left, const char* right) {
-    uint16_t y = SCREEN_H - FOOTER_H;
-
-    pTFT->setTextColor(C_TEXT_SECONDARY);
-    pTFT->setTextDatum(MC_DATUM);
-    pTFT->setFreeFont(FMBO);
-
-    if(left) pTFT->drawString(left, 50, y + FOOTER_H/2);
-    if(right) pTFT->drawString(right, SCREEN_W - 50, y + FOOTER_H/2);
-}
-
-void drawFooterIcon(uint8_t icon, int16_t x, int16_t y) {
-    pTFT->setTextDatum(MC_DATUM);
-    pTFT->setFreeFont(FMBO);
-
+void draw_component_icon(IconType icon, int16_t x, int16_t y, uint16_t color) {
+    uint16_t size = 32; // Padrao
     switch(icon) {
-        case 0:
-            pTFT->drawString("ESC", x, y);
-            break;
-        case 1:
-            pTFT->drawString("OK", x, y);
-            break;
-        default:
-            break;
+        case ICON_RESISTOR: draw_icon_resistor(x, y, size, color); break;
+        case ICON_CAPACITOR: draw_icon_capacitor_ceramic(x, y, size, color); break;
+        case ICON_DIODE: draw_icon_diode(x, y, size, color); break;
+        case ICON_LED: draw_icon_led(x, y, size, color); break;
+        case ICON_TRANSISTOR_NPN: draw_icon_transistor_npn(x, y, size, color); break;
+        case ICON_TRANSISTOR_PNP: draw_icon_transistor_pnp(x, y, size, color); break;
+        case ICON_INDUCTOR: draw_icon_inductor(x, y, size, color); break;
+        case ICON_MULTIMETER: draw_icon_multimeter(x, y, size, color); break;
+        case ICON_TEMP: draw_icon_temp(x, y, size, color); break;
+        case ICON_HISTORY: draw_icon_history(x, y, size, color); break;
+        case ICON_SETTINGS: draw_icon_settings(x, y, size, color); break;
+        case ICON_ABOUT: draw_icon_about(x, y, size, color); break;
+        case ICON_WARNING: draw_icon_warning(x, y, size, color); break;
+        case ICON_VOLTAGE: draw_icon_voltage(x, y, size, color); break;
+        default: draw_icon_unknown(x, y, size, color); break;
     }
 }
 
-// ============================================================================
-// ELEMENTOS UI
-// ============================================================================
-void drawButton(int16_t x, int16_t y, uint16_t w, uint16_t h, const char* label, bool pressed) {
-    uint16_t color = pressed ? C_PRIMARY : C_SURFACE;
-
-    pTFT->fillRoundRect(x, y, w, h, 4);
-    pTFT->drawRoundRect(x, y, w, h, 4);
-
-    pTFT->setTextColor(pressed ? C_BLACK : C_TEXT);
-    pTFT->setTextDatum(MC_DATUM);
-    pTFT->setFreeFont(FMB);
-    pTFT->drawString(label, x + w/2, y + h/2);
+void clear_screen() {
+    tft.fillScreen(C_BACKGROUND);
 }
 
-void drawProgressBar(int16_t x, int16_t y, uint16_t w, uint16_t h, float percent, uint16_t color) {
-    pTFT->fillRect(x, y, w, h);
-
-    if(percent > 0) {
-        uint16_t pw = (uint16_t)((w - 2) * percent / 100.0f);
-        pTFT->fillRect(x + 1, y + 1, pw, h - 2);
+void draw_status_bar(const char* title, const char* subtitle) {
+    tft.fillRect(0, 0, SCREEN_W, STATUS_BAR_H, C_SURFACE);
+    tft.setTextColor(C_TEXT);
+    tft.setFreeFont(FONT_NORMAL);
+    tft.setTextDatum(ML_DATUM);
+    tft.drawString(title, 10, STATUS_BAR_H/2);
+    
+    if(subtitle) {
+        tft.setTextDatum(MR_DATUM);
+        tft.setTextColor(C_PRIMARY);
+        tft.drawString(subtitle, SCREEN_W - 10, STATUS_BAR_H/2);
     }
-
-    pTFT->drawRect(x, y, w, h);
+    
+    tft.drawLine(0, STATUS_BAR_H, SCREEN_W, STATUS_BAR_H, C_PRIMARY);
 }
 
-void drawGauge(int16_t cx, int16_t cy, uint16_t radius, float value, float minVal, float maxVal, const char* unit) {
-    float angle = 270.0f;
-    float startAngle = 135.0f;
-
-    pTFT->drawArc(cx, cy, radius, radius - 5, 0, 360);
-
-    float percent = (value - minVal) / (maxVal - minVal);
-    if(percent < 0) percent = 0;
-    if(percent > 1) percent = 1;
-
-    pTFT->drawArc(cx, cy, radius, radius - 5, startAngle, startAngle + angle * percent);
-
-    char valStr[32];
-    if(value >= 1000) {
-        snprintf(valStr, sizeof(valStr), "%.1f", value / 1000.0f);
-    } else {
-        snprintf(valStr, sizeof(valStr), "%.1f", value);
+void draw_footer(const char* left, const char* right) {
+    tft.fillRect(0, SCREEN_H - FOOTER_H, SCREEN_W, FOOTER_H, C_SURFACE);
+    tft.setTextColor(C_TEXT_SECONDARY);
+    tft.setFreeFont(FONT_SMALL);
+    
+    if(left) {
+        tft.setTextDatum(ML_DATUM);
+        tft.drawString(left, 10, SCREEN_H - FOOTER_H/2);
     }
-
-    char fullStr[40];
-    snprintf(fullStr, sizeof(fullStr), "%s %s", valStr, unit);
-
-    pTFT->setTextColor(C_TEXT);
-    pTFT->setTextDatum(MC_DATUM);
-    pTFT->setFreeFont(FMB);
-    pTFT->drawString(fullStr, cx, cy);
+    
+    if(right) {
+        tft.setTextDatum(MR_DATUM);
+        tft.drawString(right, SCREEN_W - 10, SCREEN_H - FOOTER_H/2);
+    }
 }
 
-void drawValueBox(int16_t x, int16_t y, uint16_t w, uint16_t h, const char* label, const char* value, const char* unit) {
-    pTFT->fillRect(x, y, w, h);
-    pTFT->drawRect(x, y, w, h);
-
-    pTFT->setTextColor(C_TEXT_SECONDARY);
-    pTFT->setTextDatum(TC_DATUM);
-    pTFT->setFreeFont(FMBO);
-    pTFT->drawString(label, x + w/2, y + 8);
-
-    pTFT->setTextColor(C_TEXT);
-    pTFT->setTextDatum(MC_DATUM);
-    pTFT->setFreeFont(FMB);
-    pTFT->drawString(value, x + w/2, y + h/2 + 4);
-
-    pTFT->setTextColor(C_PRIMARY);
-    pTFT->setTextSize(1);
-    pTFT->drawString(unit, x + w/2, y + h - 6);
+void draw_progress_bar(int16_t x, int16_t y, uint16_t w, uint16_t h, float percent, uint16_t color) {
+    tft.drawRect(x, y, w, h, C_BORDER);
+    int16_t fillW = (int16_t)((w - 2) * percent / 100.0f);
+    if(fillW > 0) {
+        tft.fillRect(x + 1, y + 1, fillW, h - 2, color);
+    }
 }
 
-void drawWarningBox(const char* message) {
-    pTFT->fillRect(SCREEN_W/4, SCREEN_H/3, SCREEN_W/2, SCREEN_H/3);
-    pTFT->drawRect(SCREEN_W/4, SCREEN_H/3, SCREEN_W/2, SCREEN_H/3);
-
-    pTFT->setTextColor(C_WARNING);
-    pTFT->setTextDatum(MC_DATUM);
-    pTFT->setFreeFont(FMB);
-    pTFT->drawString("!", SCREEN_W/4 + 15, SCREEN_H/3 + 15);
-
-    pTFT->setTextColor(C_TEXT);
-    pTFT->setTextDatum(MC_DATUM);
-    pTFT->setFreeFont(FMB);
-    pTFT->drawString(message, SCREEN_W/2, SCREEN_H/2);
+void draw_status_indicator(MeasurementStatus status, int16_t x, int16_t y, uint16_t size) {
+    uint16_t color = C_GREY;
+    if(status == STATUS_GOOD) color = C_GREEN;
+    else if(status == STATUS_WARNING || status == STATUS_SUSPECT) color = C_YELLOW;
+    else if(status == STATUS_BAD) color = C_RED;
+    else if(status == STATUS_SHORT) color = C_ORANGE;
+    else if(status == STATUS_OPEN) color = C_BLUE;
+    
+    tft.fillCircle(x, y, size/2, color);
+    tft.drawCircle(x, y, size/2 + 2, C_WHITE);
 }
 
-void drawErrorBox(const char* message) {
-    pTFT->fillRect(SCREEN_W/4, SCREEN_H/3, SCREEN_W/2, SCREEN_H/3);
-    pTFT->drawRect(SCREEN_W/4, SCREEN_H/3, SCREEN_W/2, SCREEN_H/3);
-
-    pTFT->setTextColor(C_ERROR);
-    pTFT->setTextDatum(MC_DATUM);
-    pTFT->setFreeFont(FMB);
-    pTFT->drawString("X", SCREEN_W/4 + 15, SCREEN_H/3 + 15);
-
-    pTFT->setTextColor(C_TEXT);
-    pTFT->setTextDatum(MC_DATUM);
-    pTFT->setFreeFont(FMB);
-    pTFT->drawString(message, SCREEN_W/2, SCREEN_H/2);
-}
-
-void drawConfirmBox(const char* message) {
-    pTFT->fillRect(SCREEN_W/4, SCREEN_H/3, SCREEN_W/2, SCREEN_H/3);
-    pTFT->drawRect(SCREEN_W/4, SCREEN_H/3, SCREEN_W/2, SCREEN_H/3);
-
-    pTFT->setTextColor(C_SUCCESS);
-    pTFT->setTextDatum(MC_DATUM);
-    pTFT->setFreeFont(FMB);
-    pTFT->drawString("?", SCREEN_W/4 + 15, SCREEN_H/3 + 15);
-
-    pTFT->setTextColor(C_TEXT);
-    pTFT->setTextDatum(MC_DATUM);
-    pTFT->setFreeFont(FMB);
-    pTFT->drawString(message, SCREEN_W/2, SCREEN_H/2);
-
-    pTFT->fillRoundRect(SCREEN_W/4 + 20, SCREEN_H/3 + 40, 40, 20, 4);
-    pTFT->fillRoundRect(SCREEN_W/2 + 20, SCREEN_H/3 + 40, 40, 20, 4);
-
-    pTFT->setTextColor(C_TEXT);
-    pTFT->setTextDatum(MC_DATUM);
-    pTFT->setFreeFont(FMB);
-    pTFT->drawString("N", SCREEN_W/4 + 40, SCREEN_H/3 + 50);
-    pTFT->drawString("S", SCREEN_W/2 + 40, SCREEN_H/3 + 50);
-}
-
-// ============================================================================
-// SPLASH SCREEN
-// ============================================================================
-void drawSplashScreen(void) {
-    pTFT->fillScreen(C_BLACK);
-
-    pTFT->setTextColor(C_PRIMARY);
-    pTFT->setTextDatum(MC_DATUM);
-    pTFT->setFreeFont(FMB);
-    pTFT->drawString("Component", SCREEN_W/2, SCREEN_H/2 - 30);
-    pTFT->drawString("Tester PRO", SCREEN_W/2, SCREEN_H/2);
-
-    pTFT->setTextColor(C_TEXT_SECONDARY);
-    pTFT->setTextDatum(MC_DATUM);
-    pTFT->setFreeFont(FMBO);
-    pTFT->drawString("v" FW_VERSION, SCREEN_W/2, SCREEN_H/2 + 30);
-
-    pTFT->setTextColor(C_TEXT_SECONDARY);
-    pTFT->setTextSize(1);
-    pTFT->drawCenterString(FW_CODENAME, SCREEN_W/2, SCREEN_H - 30);
+void draw_splash_screen() {
+    tft.fillScreen(C_BACKGROUND);
+    tft.setFreeFont(FM12);
+    tft.setTextColor(C_PRIMARY);
+    tft.setTextDatum(MC_DATUM);
+    tft.drawString("SONDVOLT", SCREEN_W/2, SCREEN_H/2 - 20);
+    
+    tft.setFreeFont(FM9);
+    tft.setTextColor(C_TEXT);
+    tft.drawString("Component Tester PRO", SCREEN_W/2, SCREEN_H/2 + 20);
+    
+    tft.setTextColor(C_TEXT_SECONDARY);
+    tft.drawString("v3.0.0", SCREEN_W/2, SCREEN_H/2 + 50);
 }

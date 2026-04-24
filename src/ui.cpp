@@ -10,12 +10,13 @@
 #include "graphics.h"
 #include "buzzer.h"
 #include "database.h"
+#include "display_globals.h"
 
 // ============================================================================
 // VARIAVEIS GLOBAIS
 // ============================================================================
 
-static TFT_eSPI* pTFT = nullptr;
+
 
 Screen currentScreen = SCREEN_NONE;
 MenuData mainMenu;
@@ -28,12 +29,10 @@ static uint8_t historyIndex = 0;
 // INICIALIZACAO
 // ============================================================================
 
-void ui_init(TFT_eSPI* tft) {
-    pTFT = tft;
-    graphicsInit(tft);
-
+void ui_init(void) {
+    graphics_init();
     ui_menu_init();
-
+    
     DBG("UI inicializada");
 }
 
@@ -42,21 +41,21 @@ void ui_init(TFT_eSPI* tft) {
 // ============================================================================
 
 void ui_draw_splash(void) {
-    pTFT->fillScreen(C_BLACK);
+    tft.fillScreen(C_BLACK);
 
-    pTFT->setTextColor(C_PRIMARY);
-    pTFT->setTextDatum(MC_DATUM);
-    pTFT->setFreeFont(FMB);
-    pTFT->drawString("Component", SCREEN_W/2, SCREEN_H/2 - 20);
-    pTFT->drawString("Tester PRO", SCREEN_W/2, SCREEN_H/2 + 10);
+    tft.setTextColor(C_PRIMARY);
+    tft.setTextDatum(MC_DATUM);
+    tft.setFreeFont(FMB);
+    tft.drawString("Component", SCREEN_W/2, SCREEN_H/2 - 20);
+    tft.drawString("Tester PRO", SCREEN_W/2, SCREEN_H/2 + 10);
 
-    pTFT->setTextColor(C_TEXT_SECONDARY);
-    pTFT->setFreeFont(FMBO);
-    pTFT->drawString("v" FW_VERSION, SCREEN_W/2, SCREEN_H/2 + 40);
+    tft.setTextColor(C_TEXT_SECONDARY);
+    tft.setFreeFont(FM12);
+    tft.drawString("v" FW_VERSION, SCREEN_W/2, SCREEN_H/2 + 40);
 
-    pTFT->setTextDatum(MC_DATUM);
-    pTFT->setTextSize(1);
-    pTFT->drawString(FW_CODENAME, SCREEN_W/2, SCREEN_H - 30);
+    tft.setTextDatum(MC_DATUM);
+    tft.setTextSize(1);
+    tft.drawString(FW_CODENAME, SCREEN_W/2, SCREEN_H - 30);
 }
 
 void ui_show_splash_animated(void) {
@@ -66,7 +65,7 @@ void ui_show_splash_animated(void) {
 
     for(uint8_t i = 0; i <= 100; i += 5) {
         uint16_t barWidth = (SCREEN_W - 40) * i / 100;
-        pTFT->fillRect(20, SCREEN_H - 20, barWidth, 4);
+        tft.fillRect(20, SCREEN_H - 20, barWidth, 4);
 
         delay(30);
     }
@@ -77,13 +76,13 @@ void ui_show_splash_animated(void) {
 void ui_splash_set_progress(uint8_t percent, const char* message) {
     uint16_t barWidth = (SCREEN_W - 40) * percent / 100;
 
-    pTFT->fillRect(20, SCREEN_H - 20, barWidth, 4);
+    tft.fillRect(20, SCREEN_H - 20, barWidth, 4);
 
     if(message) {
-        pTFT->setTextColor(C_BLACK);
-        pTFT->setTextDatum(MC_DATUM);
-        pTFT->setFreeFont(FMBO);
-        pTFT->drawString(message, SCREEN_W/2, SCREEN_H - 30);
+        tft.setTextColor(C_BLACK);
+        tft.setTextDatum(MC_DATUM);
+        tft.setFreeFont(FMBO);
+        tft.drawString(message, SCREEN_W/2, SCREEN_H - 30);
     }
 }
 
@@ -132,7 +131,7 @@ void ui_menu_init(void) {
 void ui_menu_show(void) {
     currentScreen = SCREEN_MENU;
 
-    pTFT->fillScreen(C_BACKGROUND);
+    tft.fillScreen(C_BACKGROUND);
 
     ui_draw_header(mainMenu.title);
 
@@ -220,16 +219,16 @@ void ui_menu_navigate(int8_t direction) {
 void ui_measure_show(ComponentType type) {
     currentScreen = SCREEN_MEASURE;
 
-    pTFT->fillScreen(C_BACKGROUND);
+    tft.fillScreen(C_BACKGROUND);
 
     ui_draw_header("Medicao");
 
     ui_measure_draw_icon(type, 20, CONTENT_Y + 20);
 
-    pTFT->setTextColor(C_PRIMARY);
-    pTFT->setTextDatum(MC_DATUM);
-    pTFT->setFreeFont(FONT_HEADER);
-    pTFT->drawString("---", SCREEN_W/2, CONTENT_Y + CONTENT_H/2);
+    tft.setTextColor(C_PRIMARY);
+    tft.setTextDatum(MC_DATUM);
+    tft.setFreeFont(FONT_HEADER);
+    tft.drawString("---", SCREEN_W/2, CONTENT_Y + CONTENT_H/2);
 
     ui_draw_footer("", "MENU");
 }
@@ -248,12 +247,12 @@ void ui_measure_update(float value, const char* unit, MeasurementStatus status) 
     uint16_t bgColor = (status == STATUS_GOOD) ? C_SUCCESS :
                      (status == STATUS_WARNING) ? C_WARNING : C_ERROR;
 
-    pTFT->fillRect(SCREEN_W/2 - 50, CONTENT_Y + CONTENT_H/2 - 20, 100, 40);
+    tft.fillRect(SCREEN_W/2 - 50, CONTENT_Y + CONTENT_H/2 - 20, 100, 40, bgColor);
 
-    pTFT->setTextColor(C_BLACK);
-    pTFT->setTextDatum(MC_DATUM);
-    pTFT->setFreeFont(FONT_HEADER);
-    pTFT->drawString(valueStr, SCREEN_W/2, CONTENT_Y + CONTENT_H/2);
+    tft.setTextColor(C_BLACK);
+    tft.setTextDatum(MC_DATUM);
+    tft.setFreeFont(FONT_HEADER);
+    tft.drawString(valueStr, SCREEN_W/2, CONTENT_Y + CONTENT_H/2);
 
     uint8_t iconX = SCREEN_W - 40;
     uint8_t iconY = 50;
@@ -272,14 +271,14 @@ void ui_measure_draw_icon(ComponentType type, int16_t x, int16_t y) {
 void ui_multimeter_show(void) {
     currentScreen = SCREEN_MULTIMETER;
 
-    pTFT->fillScreen(C_BACKGROUND);
+    tft.fillScreen(C_BACKGROUND);
 
     ui_draw_header("Multimetro AC/DC");
 
-    pTFT->setTextColor(C_PRIMARY);
-    pTFT->setTextDatum(MC_DATUM);
-    pTFT->setFreeFont(FONT_VALUE);
-    pTFT->drawString("0.00 V", SCREEN_W/2, CONTENT_Y + CONTENT_H/2);
+    tft.setTextColor(C_PRIMARY);
+    tft.setTextDatum(MC_DATUM);
+    tft.setFreeFont(FONT_VALUE);
+    tft.drawString("0.00 V", SCREEN_W/2, CONTENT_Y + CONTENT_H/2);
 
     uint8_t buttonY = CONTENT_Y + CONTENT_H - 50;
 
@@ -295,12 +294,12 @@ void ui_multimeter_update(float value, const char* unit, uint16_t color) {
     char valueStr[32];
     snprintf(valueStr, sizeof(valueStr), "%.2f %s", value, unit);
 
-    pTFT->fillRect(SCREEN_W/2 - 60, CONTENT_Y + CONTENT_H/2 - 20, 120, 50);
+    tft.fillRect(SCREEN_W/2 - 60, CONTENT_Y + CONTENT_H/2 - 20, 120, 50, C_SURFACE);
 
-    pTFT->setTextColor(color);
-    pTFT->setTextDatum(MC_DATUM);
-    pTFT->setFreeFont(FONT_VALUE);
-    pTFT->drawString(valueStr, SCREEN_W/2, CONTENT_Y + CONTENT_H/2);
+    tft.setTextColor(color);
+    tft.setTextDatum(MC_DATUM);
+    tft.setFreeFont(FONT_VALUE);
+    tft.drawString(valueStr, SCREEN_W/2, CONTENT_Y + CONTENT_H/2);
 }
 
 void ui_multimeter_set_mode(uint8_t mode) {
@@ -319,7 +318,7 @@ void ui_multimeter_set_mode(uint8_t mode) {
 void ui_history_show(void) {
     currentScreen = SCREEN_HISTORY;
 
-    pTFT->fillScreen(C_BACKGROUND);
+    tft.fillScreen(C_BACKGROUND);
 
     ui_draw_header("Historico");
 
@@ -352,17 +351,17 @@ void ui_history_clear(void) {
 void ui_history_draw_item(uint8_t index, HistoryEntry entry) {
     uint16_t y = CONTENT_Y + 10 + index * 25;
 
-    pTFT->setTextColor(C_TEXT);
-    pTFT->setTextDatum(TL_DATUM);
-    pTFT->setFreeFont(FONT_NORMAL);
-    pTFT->drawString(entry.componentName, 10, y);
+    tft.setTextColor(C_TEXT);
+    tft.setTextDatum(TL_DATUM);
+    tft.setFreeFont(FONT_NORMAL);
+    tft.drawString(entry.componentName, 10, y);
 
     char valueStr[32];
     snprintf(valueStr, sizeof(valueStr), "%.2f %s", entry.value, entry.unit);
 
-    pTFT->setTextColor(C_PRIMARY);
-    pTFT->setTextDatum(TR_DATUM);
-    pTFT->drawString(valueStr, SCREEN_W - 10, y);
+    tft.setTextColor(C_PRIMARY);
+    tft.setTextDatum(TR_DATUM);
+    tft.drawString(valueStr, SCREEN_W - 10, y);
 }
 
 // ============================================================================
@@ -372,19 +371,19 @@ void ui_history_draw_item(uint8_t index, HistoryEntry entry) {
 void ui_calibration_show(void) {
     currentScreen = SCREEN_CALIBRATION;
 
-    pTFT->fillScreen(C_BACKGROUND);
+    tft.fillScreen(C_BACKGROUND);
 
     ui_draw_header("Calibracao");
 
-    pTFT->setTextColor(C_TEXT);
-    pTFT->setTextDatum(MC_DATUM);
-    pTFT->setFreeFont(FONT_NORMAL);
-    pTFT->drawString("Conecte as pontas de prova", SCREEN_W/2, CONTENT_Y + 40);
-    pTFT->drawString("em CURTO (0 ohm)", SCREEN_W/2, CONTENT_Y + 65);
+    tft.setTextColor(C_TEXT);
+    tft.setTextDatum(MC_DATUM);
+    tft.setFreeFont(FONT_NORMAL);
+    tft.drawString("Conecte as pontas de prova", SCREEN_W/2, CONTENT_Y + 40);
+    tft.drawString("em CURTO (0 ohm)", SCREEN_W/2, CONTENT_Y + 65);
 
-    pTFT->setTextColor(C_PRIMARY);
-    pTFT->setFreeFont(FMB);
-    pTFT->drawString("INICIAR", SCREEN_W/2, CONTENT_Y + 120);
+    tft.setTextColor(C_PRIMARY);
+    tft.setFreeFont(FMB);
+    tft.drawString("INICIAR", SCREEN_W/2, CONTENT_Y + 120);
 
     ui_draw_progress(0);
 
@@ -396,18 +395,18 @@ void ui_calibration_update_progress(uint8_t percent) {
 }
 
 void ui_calibration_show_result(bool success) {
-    pTFT->fillRect(SCREEN_W/2 - 50, CONTENT_Y + 140, 100, 40);
+    tft.fillRect(SCREEN_W/2 - 50, CONTENT_Y + 140, 100, 40, C_SURFACE);
 
     if(success) {
-        pTFT->setTextColor(C_SUCCESS);
-        pTFT->setTextDatum(MC_DATUM);
-        pTFT->setFreeFont(FMB);
-        pTFT->drawString("OK", SCREEN_W/2, CONTENT_Y + 160);
+        tft.setTextColor(C_SUCCESS);
+        tft.setTextDatum(MC_DATUM);
+        tft.setFreeFont(FMB);
+        tft.drawString("OK", SCREEN_W/2, CONTENT_Y + 160);
     } else {
-        pTFT->setTextColor(C_ERROR);
-        pTFT->setTextDatum(MC_DATUM);
-        pTFT->setFreeFont(FMB);
-        pTFT->drawString("ERRO", SCREEN_W/2, CONTENT_Y + 160);
+        tft.setTextColor(C_ERROR);
+        tft.setTextDatum(MC_DATUM);
+        tft.setFreeFont(FMB);
+        tft.drawString("ERRO", SCREEN_W/2, CONTENT_Y + 160);
     }
 }
 
@@ -418,17 +417,17 @@ void ui_calibration_show_result(bool success) {
 void ui_settings_show(void) {
     currentScreen = SCREEN_SETTINGS;
 
-    pTFT->fillScreen(C_BACKGROUND);
+    tft.fillScreen(C_BACKGROUND);
 
     ui_draw_header("Configuracoes");
 
-    pTFT->setTextColor(C_TEXT);
-    pTFT->setTextDatum(MC_DATUM);
-    pTFT->setFreeFont(FONT_NORMAL);
-    pTFT->drawString("Backlight", 80, CONTENT_Y + 40);
-    pTFT->drawString("Som", 80, CONTENT_Y + 80);
-    pTFT->drawString("Seguranca", 80, CONTENT_Y + 120);
-    pTFT->drawString("Auto-Sleep", 80, CONTENT_Y + 160);
+    tft.setTextColor(C_TEXT);
+    tft.setTextDatum(MC_DATUM);
+    tft.setFreeFont(FONT_NORMAL);
+    tft.drawString("Backlight", 80, CONTENT_Y + 40);
+    tft.drawString("Som", 80, CONTENT_Y + 80);
+    tft.drawString("Seguranca", 80, CONTENT_Y + 120);
+    tft.drawString("Auto-Sleep", 80, CONTENT_Y + 160);
 
     ui_draw_footer("SALVAR", "VOLTAR");
 }
@@ -440,8 +439,8 @@ void ui_settings_draw_slider(uint8_t index, uint8_t value) {
     uint16_t y = CONTENT_Y + 30 + index * 40;
     uint16_t sliderW = (SCREEN_W - 100 - 40) * value / 100;
 
-    pTFT->fillRect(SCREEN_W - 100, y, sliderW, 10);
-    pTFT->drawRect(SCREEN_W - 100, y, SCREEN_W - 100, 10);
+    tft.fillRect(SCREEN_W - 100, y, sliderW, 10, C_PRIMARY);
+    tft.drawRect(SCREEN_W - 100, y, SCREEN_W - 100, 10);
 }
 
 // ============================================================================
@@ -451,30 +450,30 @@ void ui_settings_draw_slider(uint8_t index, uint8_t value) {
 void ui_about_show(void) {
     currentScreen = SCREEN_ABOUT;
 
-    pTFT->fillScreen(C_BACKGROUND);
+    tft.fillScreen(C_BACKGROUND);
 
     ui_draw_header("Sobre");
 
     drawComponentIcon(COMP_UNKNOWN, SCREEN_W/2 - 20, CONTENT_Y + 20, 40);
 
-    pTFT->setTextColor(C_PRIMARY);
-    pTFT->setTextDatum(MC_DATUM);
-    pTFT->setFreeFont(FMB);
-    pTFT->drawString("Component Tester PRO", SCREEN_W/2, CONTENT_Y + 80);
+    tft.setTextColor(C_PRIMARY);
+    tft.setTextDatum(MC_DATUM);
+    tft.setFreeFont(FMB);
+    tft.drawString("Component Tester PRO", SCREEN_W/2, CONTENT_Y + 80);
 
-    pTFT->setTextColor(C_TEXT);
-    pTFT->setFreeFont(FONT_NORMAL);
-    pTFT->drawString("v" FW_VERSION, SCREEN_W/2, CONTENT_Y + 105);
-    pTFT->drawString(FW_CODENAME, SCREEN_W/2, CONTENT_Y + 130);
+    tft.setTextColor(C_TEXT);
+    tft.setFreeFont(FONT_NORMAL);
+    tft.drawString("v" FW_VERSION, SCREEN_W/2, CONTENT_Y + 105);
+    tft.drawString(FW_CODENAME, SCREEN_W/2, CONTENT_Y + 130);
 
-    pTFT->setTextColor(C_TEXT_SECONDARY);
-    pTFT->setFreeFont(FMBO);
-    pTFT->drawString(FW_AUTHOR, SCREEN_W/2, CONTENT_Y + 160);
-    pTFT->drawString(FW_YEAR, SCREEN_W/2, CONTENT_Y + 180);
+    tft.setTextColor(C_TEXT_SECONDARY);
+    tft.setFreeFont(FMBO);
+    tft.drawString(FW_AUTHOR, SCREEN_W/2, CONTENT_Y + 160);
+    tft.drawString(FW_YEAR, SCREEN_W/2, CONTENT_Y + 180);
 
-    pTFT->setTextColor(C_GREY);
-    pTFT->setTextSize(1);
-    pTFT->drawString(BOARD_NAME, SCREEN_W/2, CONTENT_Y + 205);
+    tft.setTextColor(C_GREY);
+    tft.setTextSize(1);
+    tft.drawString(BOARD_NAME, SCREEN_W/2, CONTENT_Y + 205);
 
     ui_draw_footer("", "MENU");
 }
@@ -489,22 +488,22 @@ void ui_about_draw_info(void) {
 void ui_error_show(const char* title, const char* message) {
     currentScreen = SCREEN_ERROR;
 
-    pTFT->fillScreen(C_BACKGROUND);
+    tft.fillScreen(C_BACKGROUND);
 
     ui_draw_header(title);
 
     ui_error_draw_icon(0);
 
-    pTFT->setTextColor(C_TEXT);
-    pTFT->setTextDatum(MC_DATUM);
-    pTFT->setFreeFont(FONT_NORMAL);
-    pTFT->drawString(message, SCREEN_W/2, CONTENT_Y + CONTENT_H/2);
+    tft.setTextColor(C_TEXT);
+    tft.setTextDatum(MC_DATUM);
+    tft.setFreeFont(FONT_NORMAL);
+    tft.drawString(message, SCREEN_W/2, CONTENT_Y + CONTENT_H/2);
 
-    pTFT->fillRoundRect(SCREEN_W/2 - 40, SCREEN_H - 50, 80, 25, 4);
-    pTFT->setTextColor(C_TEXT);
-    pTFT->setTextDatum(MC_DATUM);
-    pTFT->setFreeFont(FMB);
-    pTFT->drawString("OK", SCREEN_W/2, SCREEN_H - 38);
+    tft.fillRoundRect(SCREEN_W/2 - 40, SCREEN_H - 50, 80, 25, 4, C_PRIMARY);
+    tft.setTextColor(C_BLACK);
+    tft.setTextDatum(MC_DATUM);
+    tft.setFreeFont(FMB);
+    tft.drawString("OK", SCREEN_W/2, SCREEN_H - 38);
 }
 
 void ui_error_draw_icon(uint8_t type) {
@@ -514,16 +513,16 @@ void ui_error_draw_icon(uint8_t type) {
         color = C_WARNING;
     }
 
-    pTFT->fillCircle(SCREEN_W/2, CONTENT_Y + 40, 20);
+    tft.fillCircle(SCREEN_W/2, CONTENT_Y + 40, 20);
 
-    pTFT->setTextColor(C_BLACK);
-    pTFT->setTextDatum(MC_DATUM);
-    pTFT->setFreeFont(FMB);
+    tft.setTextColor(C_BLACK);
+    tft.setTextDatum(MC_DATUM);
+    tft.setFreeFont(FMB);
 
     if(type == 0) {
-        pTFT->drawString("!", SCREEN_W/2, CONTENT_Y + 40);
+        tft.drawString("!", SCREEN_W/2, CONTENT_Y + 40);
     } else {
-        pTFT->drawString("X", SCREEN_W/2, CONTENT_Y + 40);
+        tft.drawString("X", SCREEN_W/2, CONTENT_Y + 40);
     }
 }
 
@@ -531,7 +530,7 @@ bool ui_error_wait_confirm(void) {
     uint16_t x, y;
 
     while(true) {
-        if(pTFT->getTouch(&x, &y)) {
+        if(tft.getTouch(&x, &y)) {
             if(y > SCREEN_H - 60 && y < SCREEN_H - 30) {
                 if(x > SCREEN_W/2 - 40 && x < SCREEN_W/2 + 40) {
                     return true;
@@ -550,61 +549,61 @@ bool ui_error_wait_confirm(void) {
 // ============================================================================
 
 void ui_draw_header(const char* title) {
-    pTFT->fillRect(0, 0, SCREEN_W, STATUS_BAR_H);
+    tft.fillRect(0, 0, SCREEN_W, STATUS_BAR_H);
 
-    pTFT->setTextColor(C_TEXT);
-    pTFT->setTextDatum(ML_DATUM);
-    pTFT->setFreeFont(FMB);
-    pTFT->drawString(title, 4, STATUS_BAR_H/2);
+    tft.setTextColor(C_TEXT);
+    tft.setTextDatum(ML_DATUM);
+    tft.setFreeFont(FMB);
+    tft.drawString(title, 4, STATUS_BAR_H/2);
 
-    pTFT->drawLine(0, STATUS_BAR_H - 1, SCREEN_W, STATUS_BAR_H - 1);
+    tft.drawLine(0, STATUS_BAR_H - 1, SCREEN_W, STATUS_BAR_H - 1, C_GREY);
 }
 
 void ui_draw_footer(const char* left, const char* right) {
     uint16_t y = SCREEN_H - FOOTER_H;
 
-    pTFT->fillRect(0, y, SCREEN_W, FOOTER_H);
+    tft.fillRect(0, y, SCREEN_W, FOOTER_H, C_SURFACE);
 
-    pTFT->drawLine(0, y, SCREEN_W, y);
+    tft.drawLine(0, y, SCREEN_W, y, C_GREY);
 
-    pTFT->setTextColor(C_TEXT_SECONDARY);
-    pTFT->setTextDatum(ML_DATUM);
-    pTFT->setFreeFont(FMBO);
+    tft.setTextColor(C_TEXT_SECONDARY);
+    tft.setTextDatum(ML_DATUM);
+    tft.setFreeFont(FMBO);
 
     if(left) {
-        pTFT->drawString(left, 10, y + FOOTER_H/2);
+        tft.drawString(left, 10, y + FOOTER_H/2);
     }
 
-    pTFT->setTextDatum(MR_DATUM);
+    tft.setTextDatum(MR_DATUM);
     if(right) {
-        pTFT->drawString(right, SCREEN_W - 10, y + FOOTER_H/2);
+        tft.drawString(right, SCREEN_W - 10, y + FOOTER_H/2);
     }
 }
 
 void ui_draw_button(int16_t x, int16_t y, uint16_t w, uint16_t h, const char* label, bool pressed) {
     uint16_t color = pressed ? C_PRIMARY : C_SURFACE;
 
-    pTFT->fillRoundRect(x, y, w, h, 4, color);
+    tft.fillRoundRect(x, y, w, h, 4, color);
 
     if(!pressed) {
-        pTFT->drawRoundRect(x, y, w, h, 4, C_GREY);
+        tft.drawRoundRect(x, y, w, h, 4, C_GREY);
     }
 
-    pTFT->setTextColor(pressed ? C_BLACK : C_TEXT);
-    pTFT->setTextDatum(MC_DATUM);
-    pTFT->setFreeFont(FMB);
-    pTFT->drawString(label, x + w/2, y + h/2);
+    tft.setTextColor(pressed ? C_BLACK : C_TEXT);
+    tft.setTextDatum(MC_DATUM);
+    tft.setFreeFont(FMB);
+    tft.drawString(label, x + w/2, y + h/2);
 }
 
 void ui_draw_list_item(int16_t y, uint8_t index, const char* text, bool selected) {
     if(selected) {
-        pTFT->fillRect(0, y - 10, SCREEN_W, 28);
+        tft.fillRect(0, y - 10, SCREEN_W, 28, C_PRIMARY);
     }
 
-    pTFT->setTextColor(selected ? C_BLACK : C_TEXT);
-    pTFT->setTextDatum(ML_DATUM);
-    pTFT->setFreeFont(FONT_NORMAL);
-    pTFT->drawString(text, 10, y + 4);
+    tft.setTextColor(selected ? C_BLACK : C_TEXT);
+    tft.setTextDatum(ML_DATUM);
+    tft.setFreeFont(FONT_NORMAL);
+    tft.drawString(text, 10, y + 4);
 }
 
 void ui_draw_progress(uint8_t percent) {
@@ -613,20 +612,20 @@ void ui_draw_progress(uint8_t percent) {
     uint16_t w = SCREEN_W - 40;
     uint16_t h = 15;
 
-    pTFT->fillRect(x, y, w, h, C_SURFACE);
-    pTFT->drawRect(x, y, w, h, C_GREY);
+    tft.fillRect(x, y, w, h, C_SURFACE);
+    tft.drawRect(x, y, w, h, C_GREY);
 
     uint16_t fillW = (w - 4) * percent / 100;
-    pTFT->fillRect(x + 2, y + 2, fillW, h - 4);
+    tft.fillRect(x + 2, y + 2, fillW, h - 4);
 }
 
 void ui_draw_status_bar(const char* text, uint16_t color) {
-    pTFT->fillRect(0, 0, SCREEN_W, STATUS_BAR_H);
+    tft.fillRect(0, 0, SCREEN_W, STATUS_BAR_H);
 
-    pTFT->setTextColor(color);
-    pTFT->setTextDatum(ML_DATUM);
-    pTFT->setFreeFont(FMB);
-    pTFT->drawString(text, 4, STATUS_BAR_H/2);
+    tft.setTextColor(color);
+    tft.setTextDatum(ML_DATUM);
+    tft.setFreeFont(FMB);
+    tft.drawString(text, 4, STATUS_BAR_H/2);
 }
 
 // ============================================================================
@@ -641,7 +640,7 @@ bool ui_touch_wait(uint16_t* x, uint16_t* y, uint32_t timeoutMs) {
     uint32_t start = millis();
 
     while(millis() - start < timeoutMs) {
-        if(pTFT->getTouch(x, y)) {
+        if(tft.getTouch(x, y)) {
             if(ui_touch_is_valid(*x, *y)) {
                 return true;
             }
@@ -673,19 +672,9 @@ void ui_animate_progress(uint8_t start, uint8_t end, uint16_t durationMs) {
 }
 
 void ui_animate_fade_in(void) {
-    pTFT->setBrightness(0);
-
-    for(uint8_t b = 0; b <= 255; b += 15) {
-        pTFT->setBrightness(b);
-        delay(20);
-    }
+    digitalWrite(PIN_TFT_BL, HIGH);
 }
 
 void ui_animate_fade_out(void) {
-    for(int8_t b = 255; b >= 0; b -= 15) {
-        pTFT->setBrightness(b);
-        delay(20);
-    }
-
-    pTFT->setBrightness(0);
+    digitalWrite(PIN_TFT_BL, LOW);
 }

@@ -9,7 +9,7 @@
 
 void buzzer_init();
 void buzzer_update();
-void buzzer_beep(unsigned int freq);
+void buzzer_beep(unsigned int freq, unsigned long durationMs = 100);
 void buzzer_beep_duration(unsigned int freq, unsigned long durationMs);
 void buzzer_tone(unsigned int freq);
 void buzzer_no_tone();
