@@ -78,8 +78,19 @@ void ui_update() {
         menu_draw();
     } 
     else {
-        // DESENHAR CONTEÚDO DO INSTRUMENTO AQUI
-        draw_instrument_content();
+        // Redesenha continuamente apenas se for um modo de instrumento (medição)
+        if (currentAppState >= 10 && currentAppState < 40) {
+            draw_instrument_content();
+        } 
+        else if (currentAppState == STATE_ABOUT) {
+            draw_about_screen();
+        }
+        else if (currentAppState == STATE_SETTINGS) {
+            draw_settings_screen();
+        }
+        else if (currentAppState == STATE_HISTORY) {
+            draw_history_screen();
+        }
     }
 }
 
