@@ -66,6 +66,47 @@ const int16_t CARD_W = 95;
 const int16_t CARD_H = 80;
 const int16_t GAP = 8;
 
+static void sync_menu_state_for_current_context() {
+    uint8_t count = 0;
+    get_current_menu(&count);
+
+    int cols = 3;
+    int rows = 2;
+    if (currentAppState == STATE_MENU) {
+        cols = 2;
+        rows = 2;
+    } else if (currentAppState == STATE_SUBMENU_TEMP) {
+        cols = 1;
+        rows = 2;
+    }
+
+    const int itemsPerPage = cols * rows;
+    const int totalPages = (count + itemsPerPage - 1) / itemsPerPage;
+
+    if (count == 0) {
+        selectedIdx = 0;
+        currentMenuPage = 0;
+        return;
+    }
+
+    if (selectedIdx < 0 || selectedIdx >= count) {
+        selectedIdx = 0;
+    }
+
+    if (currentMenuPage >= totalPages) {
+        currentMenuPage = 0;
+    }
+
+    const int firstIdxOnPage = currentMenuPage * itemsPerPage;
+    const int lastIdxOnPage = firstIdxOnPage + itemsPerPage - 1;
+    if (selectedIdx < firstIdxOnPage || selectedIdx > lastIdxOnPage) {
+        selectedIdx = firstIdxOnPage;
+        if (selectedIdx >= count) {
+            selectedIdx = count - 1;
+        }
+    }
+}
+
 #include "fonts.h"
 
 void draw_card(int16_t x, int16_t y, const MenuCard* card, bool selected, int16_t w, int16_t h) {
@@ -107,6 +148,8 @@ void draw_card(int16_t x, int16_t y, const MenuCard* card, bool selected, int16_
 
 void menu_draw() {
     if (!needsRedraw) return;
+
+    sync_menu_state_for_current_context();
     
     uint8_t count = 0;
     MenuCard* menu = get_current_menu(&count);
@@ -212,6 +255,8 @@ void menu_scroll(int8_t direction) {
 }
 
 void menu_handle() {
+    sync_menu_state_for_current_context();
+
     uint8_t count = 0;
     MenuCard* menu = get_current_menu(&count);
     if (needsRedraw) menu_draw();
@@ -249,6 +294,8 @@ void menu_handle() {
 }
 
 void menu_handle_touch(int16_t x, int16_t y) {
+    sync_menu_state_for_current_context();
+
     uint8_t count = 0;
     MenuCard* menu = get_current_menu(&count);
     
