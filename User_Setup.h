@@ -24,7 +24,7 @@
 // ============================================================================
 #define TFT_CS   15
 #define TFT_DC   2
-#define TFT_RST  0   // Pino de reset (GPIO0)
+#define TFT_RST  -1  // Sem pino de reset (controlado por software)
 #define TFT_MOSI 13
 #define TFT_SCLK 14
 #define TFT_MISO 12
@@ -44,7 +44,7 @@
 #define TOUCH_MOSI 32
 #define TOUCH_MISO 39
 
-#define SPI_TOUCH_FREQUENCY 1000000  // Reduzido para 1MHz para maior estabilidade
+#define SPI_TOUCH_FREQUENCY 2500000
 
 // ============================================================================
 // FONTES SUPORTADAS
@@ -61,7 +61,7 @@
 // ============================================================================
 // OUTRAS CONFIGURAÇÕES
 // ============================================================================
-#define TFT_ROTATION 1  // Paisagem (conector USB à esquerda)
+#define TFT_ROTATION 3  // Paisagem invertido (conector USB à direita)
 #define SHOW_SPLASH   // Mostrar splash screen do TFT_eSPI
 
 #endif // USER_SETUP_H

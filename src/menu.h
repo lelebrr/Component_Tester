@@ -1,166 +1,61 @@
 // ============================================================================
-// Sondvolt v3.0 — Sistema de Menu e Navegação
-// Descrição: Menu principal com grid cards e navegação fluida
+// Sondvolt v3.2 — Sistema de Menu e Navegação (Header)
+// Hardware: ESP32-2432S028R (Cheap Yellow Display)
 // ============================================================================
+// Arquivo: menu.h
+// Descrição: Definições de estados de navegação e protótipos de interface
+// ============================================================================
+
 #ifndef MENU_H
 #define MENU_H
 
-#include "config.h"
-#include "globals.h"
-#include <Adafruit_GFX.h>
+#include <Arduino.h>
+#include "globals.h" // Para IconType e AppState
+#include "graphics.h"
 
-// AppState moved to globals.h
-
-// ============================================================================
-// ESTRUTURAS DE DADOS DO MENU
-// ============================================================================
-// Item do grid de menu principal
-typedef struct {
-    const char* label;          // Texto do card
-    AppState targetState;      // Estado ao selecionar
-    uint8_t iconType;         // Tipo de ícone (usado em graphics)
-    uint16_t color;           // Cor do card
-    uint8_t flags;            // Flags extras
-} MenuCard;
-
-#define MENU_FLAG_NONE       0x00
-#define MENU_FLAG_WARNING    0x01  // Mostra badge de alerta
-#define MENU_FLAG_BADGE     0x02  // Mostra badge numérico
-
-// Item de navegação (botões / retorno)
-typedef struct {
+struct MenuCard {
     const char* label;
-    uint8_t iconId;
-} NavButton;
+    AppState targetState;
+    IconType icon;
+    uint16_t color;
+};
 
-// ============================================================================
-// MENU PRINCIPAL — CONFIGURAÇÃO DOS CARDS
-// ============================================================================
-extern const MenuCard MAIN_MENU_CARDS[];
-extern const uint8_t MAIN_MENU_COUNT;
+// Estados da Interface
+enum UIState {
+    UI_STATE_SPLASH,
+    UI_STATE_MAIN_MENU,
+    UI_STATE_COMPONENT_TESTER,
+    UI_STATE_MULTIMETER,
+    UI_STATE_THERMAL,
+    UI_STATE_LOGS,
+    UI_STATE_CALIBRATION,
+    UI_STATE_ABOUT
+};
 
-// ============================================================================
-// MENU DE MEDIÇÃO — CONFIGURAÇÃO
-// ============================================================================
-extern const MenuCard MEASURE_MENU_CARDS[];
-extern const uint8_t MEASURE_MENU_COUNT;
+// Estrutura de Botões do Menu
+struct MenuButton {
+    int16_t x, y, w, h;
+    const char* label;
+    uint16_t color;
+    void (*callback)();
+};
 
-// ============================================================================
-// MENU DE CONFIGURAÇÕES — ITENS
-// ============================================================================
-extern const MenuCard SETTINGS_MENU_CARDS[];
-extern const uint8_t SETTINGS_MENU_COUNT;
-
-// ============================================================================
-// PROTÓTIPOS — MENU PRINCIPAL
-// ============================================================================
-
-// Inicialização do sistema de menu
+// Funções do Sistema de Menu
 void menu_init();
-
-// Loop principal do menu (chamado no loop)
-void menu_handle();
-
-// Desenhar o menu principal
+void menu_render();
+void menu_handle_touch(int16_t x, int16_t y);
+void menu_change_state(UIState newState);
 void menu_draw();
-
-// Atualizar highlight do card selecionado
-void menu_updateSelection(int8_t index);
-
-// Navegação entre cards
-void menu_navigate(int8_t direction);
-
-// Selecionar card atual
-void menu_select();
-
-// Retornar ao menu anterior
-void menu_back();
-
-// Forçar redesenho do menu
+void menu_handle();
 void menu_refresh();
+void menu_scroll(int8_t direction);
 
-// Desenha dots de pagina
-void draw_page_dots(int8_t page, int8_t total);
-
-// ============================================================================
-// PROTÓTIPOS — SUB-MENUS
-// ============================================================================
-
-// Desenhar menu de medição
-void measure_menu_draw();
-void measure_menu_handle();
-
-// Desenhar menu de configuração
-void settings_draw();
-void settings_handle();
-
-// Desenhar tela sobre
-void about_draw();
-void about_handle();
-
-// Desenhar histórico
-void history_draw();
-void history_handle();
-
-// Desenhar estatísticas
-void stats_draw();
-void stats_handle();
-
-// Desenhar scanner
-void scanner_draw();
-void scanner_handle();
-
-// Calibração
-void calibration_draw();
-void calibration_handle();
-
-// ============================================================================
-// PROTÓTIPOS — COMPONENTES DA UI
-// ============================================================================
-
-// (declarations moved to graphics.h)
-
-// Desenha card do menu (com borda, ícone, label e highlight)
-void draw_menu_card(int x, int y, int w, int h,
-                   const MenuCard* card, bool selected);
-
-// Desenha card de resultado de medição
-void draw_result_card(const char* component, const char* value,
-                     const char* unit, const char* status, uint16_t statusColor);
-
-// Desenha modal de confirmação
-bool draw_confirm_modal(const char* title, const char* message);
-
-// Desenha seletor de valor (slider)
-int draw_slider_modal(const char* title, int min, int max, int value);
-
-// ============================================================================
-// ANIMAÇÕES E TRANSIÇÕES
-// ============================================================================
-
-// Transição de fade-out para próxima tela
-void transition_out();
-
-// Transição de fade-in vinda da tela anterior
-void transition_in();
-
-// Transição slide para a esquerda
-void transition_slide_left();
-
-// Transição slide para a direita
-void transition_slide_right();
-
-// ============================================================================
-// TOUCH HANDLING NO MENU
-// ============================================================================
-
-// Processa toque e retorna índice do card selecionado (-1 = nenhum)
-int menu_process_touch();
-
-// Processa toque no menu de medição
-int measure_process_touch();
-
-// Processa toque no menu de configuração
-int settings_process_touch();
+// Sub-telas de renderização
+void draw_main_menu();
+void draw_component_tester();
+void draw_multimeter_screen();
+void draw_thermal_screen();
+void draw_logs_screen();
+void draw_calibration_screen();
 
 #endif // MENU_H

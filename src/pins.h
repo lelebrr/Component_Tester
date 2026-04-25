@@ -66,13 +66,13 @@
 #define TOUCH_PIN_NUM_CLK    PIN_HSPI_SCLK
 #define TOUCH_PIN_NUM_CS     PIN_TOUCH_CS
 
-// Configuracoes do touch (Calibradas para CYD)
-#define TOUCH_MIN_X           300     // Valor ADCmin X (Ajustado via log)
-#define TOUCH_MAX_X           3700    // Valor ADCmax X (Ajustado via log)
-#define TOUCH_MIN_Y           600     // Valor ADCmin Y (Ajustado via log)
-#define TOUCH_MAX_Y           3600    // Valor ADCmax Y (Ajustado via log)
+// Configuracoes do touch (Calibradas para CYD - Versão Original)
+#define TOUCH_MIN_X           300     // Valor ADCmin X
+#define TOUCH_MAX_X           3700    // Valor ADCmax X
+#define TOUCH_MIN_Y           600     // Valor ADCmin Y
+#define TOUCH_MAX_Y           3600    // Valor ADCmax Y
 #define TOUCH_MIN_PRESSURE    100     // Pressao minima valida
-#define TOUCH_MAX_PRESSURE    1000     // Pressao maxima
+#define TOUCH_MAX_PRESSURE    1000    // Pressao maxima
 
 // ============================================================================
 // CARTAO SD CARD (Barramento HSPI - Compartilhado com Touch!)
@@ -81,18 +81,18 @@
 // Para evitar conflitos, o CS do touch deve ser desabilitado quando usar SD
 // ------------------------------------------------------------------------
 
-// Pinos do SD (mesmo barramento HSPI!)
-#define PIN_SD_MOSI            23      // HSPI MOSI (GPIO23)
-#define PIN_SD_MISO           19      // HSPI MISO (GPIO19)
-#define PIN_SD_SCLK           18      // HSPI Clock (GPIO18)
+// Pinos do SD (Barramento VSPI padrão na CYD para SD)
+#define PIN_SD_MOSI            23      // GPIO23
+#define PIN_SD_MISO           19      // GPIO19
+#define PIN_SD_SCLK           18      // GPIO18
 
 // Controle do SD
 #define PIN_SD_CS             5       // Chip Select (GPIO5) - ATIVO BAIXO
 #define PIN_SD_DETECT         GPIO_NUM_NC  // Detect (nao conectado)
 
 // Configuracoes do barramento
-#define SD_HSPI_HOST          HSPI_HOST
-#define SD_PIN_NUM_MOSI        PIN_SD_MOSI
+#define SD_SPI_HOST           VSPI_HOST  // Mesmo host do TFT
+#define SD_PIN_NUM_MOSI       PIN_SD_MOSI
 #define SD_PIN_NUM_MISO       PIN_SD_MISO
 #define SD_PIN_NUM_CLK        PIN_SD_SCLK
 #define SD_PIN_NUM_CS         PIN_SD_CS
@@ -163,7 +163,6 @@
 
 // Buzzer ativo (oscilador interno)
 #define PIN_BUZZER            26      // Buzzer PWM (GPIO26)
-#define BUZZER_FREQ_DEFAULT   2000    // Frequencia default (Hz)
 
 // ============================================================================
 // COMUNICACAO ONEWIRE (DS18B20)
@@ -265,5 +264,11 @@
 #define PIN_PROBE_1           PIN_ADC_PROBE1
 #define PIN_PROBE_2           PIN_ADC_PROBE2
 #define PIN_ZMPT_AC           PIN_ADC_ZMPT
+
+// SD Card Aliases
+#define SD_CS                 PIN_SD_CS
+
+// Thermal Sensor
+#define PIN_DS18B20           PIN_ONEWIRE
 
 #endif // PINS_H

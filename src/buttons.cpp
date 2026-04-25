@@ -6,16 +6,11 @@
 #include "buttons.h"
 #include "config.h"
 #include "pins.h"
-#include "globals.h"
 #include "display_globals.h"
-
-#include <string.h>
-#include <XPT2046_Touchscreen.h>
+#include "globals.h"
 #include <SPI.h>
 
-// Instancia o controlador de touch nos pinos dedicados da CYD
-SPIClass touchSPI(HSPI);
-XPT2046_Touchscreen touch(PIN_TOUCH_CS); 
+extern SPIClass touchSPI;
 
 
 // ============================================================================
@@ -74,7 +69,7 @@ void buttons_init() {
         
         // Inicializa o controlador XPT2046
         if (touch.begin(touchSPI)) {
-            touch.setRotation(1); // Rotação 1 ou 3 dependendo do espelhamento, CYD costuma ser 1
+            touch.setRotation(3); // Rotação 3 (paisagem invertido) para sincronizar com display
             touchOk = true;
             LOG_SERIAL_F("[BTN] Touch controller XPT2046 inicializado com sucesso");
         } else {
@@ -129,10 +124,22 @@ void buttons_update() {
         uint16_t tx = p.x;
         uint16_t ty = p.y;
         
+        // Validação básica das coordenadas
+        if (tx < TOUCH_MIN_X || tx > TOUCH_MAX_X || ty < TOUCH_MIN_Y || ty > TOUCH_MAX_Y) {
+            // Coordenadas inválidas, ignora
+            return;
+        }
+        
         // Log de touch detectado (a cada 500ms para evitar spam)
         static unsigned long lastTouchLog = 0;
         if (now - lastTouchLog > 500) {
             LOG_SERIAL_FMT("[BTN] Touch detectado - Raw: X=%d, Y=%d, Z=%d\n", tx, ty, p.z);
+            
+            // Mapeia e exibe coordenadas mapeadas
+            int16_t mappedX = map(tx, TOUCH_MIN_X, TOUCH_MAX_X, SCREEN_WIDTH, 0);
+            int16_t mappedY = map(ty, TOUCH_MIN_Y, TOUCH_MAX_Y, 0, SCREEN_HEIGHT);
+            LOG_SERIAL_FMT("[BTN] Mapeado: X=%d, Y=%d\n", mappedX, mappedY);
+            
             lastTouchLog = now;
         }
         
@@ -142,12 +149,6 @@ void buttons_update() {
             gLastTouch.x = tx;
             gLastTouch.y = ty;
             gLastTouch.z = p.z;
-            
-            // Mapeamento manual de coordenadas para ROTAÇÃO 3 (Flipped Landscape)
-            int16_t mappedX = map(tx, TOUCH_MIN_X, TOUCH_MAX_X, SCREEN_W, 0);
-            int16_t mappedY = map(ty, TOUCH_MIN_Y, TOUCH_MAX_Y, SCREEN_H, 0);
-            
-            LOG_SERIAL_FMT("[BTN] Touch pressionado - Mapeado: X=%d, Y=%d\n", mappedX, mappedY);
             
             // Define justPressed APENAS no momento inicial do toque
             gButtons[BTN_TOUCH].justPressed = true;
@@ -214,10 +215,30 @@ TouchPoint touch_get_point() {
     TouchPoint p;
     if (touch.touched()) {
         TS_Point tp = touch.getPoint();
-        // Mapeia coordenadas para a tela (ROTAÇÃO 3)
-        p.x = map(tp.x, TOUCH_MIN_X, TOUCH_MAX_X, SCREEN_W, 0);
-        p.y = map(tp.y, TOUCH_MIN_Y, TOUCH_MAX_Y, SCREEN_H, 0);
-        p.z = tp.z;
+        
+        // Validação básica das coordenadas
+        if (tp.x >= TOUCH_MIN_X && tp.x <= TOUCH_MAX_X &&
+            tp.y >= TOUCH_MIN_Y && tp.y <= TOUCH_MAX_Y) {
+            
+            // Mapeia coordenadas para a tela (ROTAÇÃO 3 - Paisagem invertido)
+            p.x = map(tp.x, TOUCH_MIN_X, TOUCH_MAX_X, SCREEN_WIDTH, 0);
+            p.y = map(tp.y, TOUCH_MIN_Y, TOUCH_MAX_Y, 0, SCREEN_HEIGHT);
+            p.z = tp.z;
+            
+            // Log para depuração (a cada 2s)
+            static unsigned long lastDebugLog = 0;
+            unsigned long now = millis();
+            if (now - lastDebugLog > 2000) {
+                LOG_SERIAL_FMT("[TOUCH] Coordenadas mapeadas: X=%d, Y=%d (Raw: %d, %d)\n",
+                             p.x, p.y, tp.x, tp.y);
+                lastDebugLog = now;
+            }
+        } else {
+            // Coordenadas inválidas, retorna zeros
+            p.x = 0;
+            p.y = 0;
+            p.z = 0;
+        }
     } else {
         p.x = 0;
         p.y = 0;

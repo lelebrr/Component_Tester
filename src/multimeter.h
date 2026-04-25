@@ -30,9 +30,6 @@
 // ============================================================================
 
 #define ZMPT_SAMPLES_PER_CYCLE   64      // Amostras por ciclo (60Hz)
-#ifndef ZMPT_SAMPLE_RATE_US
-#define ZMPT_SAMPLE_RATE_US      260     // ~260us entre amostras (64 amostras em 16.67ms)
-#endif
 #define ZMPT_ZERO_VOLTAGE        2048    // Zero ideal do ADC (12-bit)
 #define ZMPT_VOLTS_PER_COUNT      0.146f  // Fator de conversão (220V / 1507 contagens)
 
@@ -67,11 +64,8 @@
 #define CURRENT_RANGE_A         3.2f    // 0-3.2A
 
 // Resistência
-#define RESISTANCE_MAX         1000000.0f // 1MΩ máximo
-
-// Limiares de segurança
-#define SHORT_CIRCUIT_OHMS     0.5f    // Limiar de curto-circuito
-#define HIGH_VOLTAGE_THRESHOLD 50.0f   // Alerta de tensão alta (AC)
+// Limiares de segurança (já definidos em config.h se necessário)
+// #define HIGH_VOLTAGE_THRESHOLD 50.0f   // Alerta de tensão alta (AC)
 
 // ============================================================================
 // MODOS DO MULTÍMETRO

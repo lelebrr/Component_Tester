@@ -1,11 +1,3 @@
-// ============================================================================
-// Sondvolt v3.x — Sistema de Seguranca Eletrica
-// Hardware: ESP32-2432S028R (Cheap Yellow Display)
-// ============================================================================
-// Arquivo: safety.cpp
-// Descricao: Implementacao do sistema de seguranca contra tensoes perigosas
-// ============================================================================
-
 #include "safety.h"
 #include "config.h"
 #include "pins.h"
@@ -13,6 +5,7 @@
 #include "buzzer.h"
 #include "display_globals.h"
 #include "display_mutex.h"
+#include <XPT2046_Touchscreen.h>
 
 
 // ============================================================================
@@ -27,6 +20,23 @@ bool safetyAutoLockoutEnabled = true;
 
 static TaskHandle_t safetyTaskHandle = nullptr;
 static bool alertActive = false;
+
+static bool map_touch_to_screen_safe(const TS_Point& raw, uint16_t& outX, uint16_t& outY) {
+    if (raw.z < TOUCH_MIN_PRESSURE || raw.z > TOUCH_MAX_PRESSURE) {
+        return false;
+    }
+
+    if (raw.x < TOUCH_MIN_X || raw.x > TOUCH_MAX_X || raw.y < TOUCH_MIN_Y || raw.y > TOUCH_MAX_Y) {
+        return false;
+    }
+
+    int32_t mx = map(raw.x, TOUCH_MIN_X, TOUCH_MAX_X, SCREEN_WIDTH, 0);
+    int32_t my = map(raw.y, TOUCH_MIN_Y, TOUCH_MAX_Y, 0, SCREEN_HEIGHT);
+
+    outX = (uint16_t)constrain(mx, 0, SCREEN_WIDTH - 1);
+    outY = (uint16_t)constrain(my, 0, SCREEN_HEIGHT - 1);
+    return true;
+}
 
 // ============================================================================
 // INICIALIZACAO
@@ -46,7 +56,7 @@ void safety_init() {
     digitalWrite(PIN_LED_RED, LOW);
     digitalWrite(PIN_LED_GREEN, HIGH);
 
-    DBG("Sistema de seguranca inicializado");
+    LOG_SERIAL_F("Sistema de seguranca inicializado");
 }
 
 void safety_reset() {
@@ -186,106 +196,120 @@ void safety_alert_stop() {
 
 void safety_draw_danger_screen(const char* message, float voltage) {
     LOCK_TFT();
-    tft.fillScreen(SAFETY_COLOR_ALERT_BG);
+    tft.fillScreen(COLOR_BAD);
 
-    tft.setTextColor(SAFETY_COLOR_DANGER);
-    tft.setTextDatum(MC_DATUM);
-    tft.setFreeFont(FMB);
-    tft.drawString("ALERTA DE SEGURANCA", SCREEN_W/2, 40);
+    tft.setTextColor(COLOR_TEXT);
+    tft.setTextSize(2);
+    tft.setCursor(20, 40);
+    tft.print("ALERTA DE SEGURANCA");
 
     char voltStr[32];
     snprintf(voltStr, sizeof(voltStr), "%.1f V", voltage);
 
-    tft.setTextColor(C_WHITE);
-    tft.setFreeFont(FMB);
-    tft.drawString(voltStr, SCREEN_W/2, 80);
+    tft.setTextColor(COLOR_TEXT);
+    tft.setTextSize(3);
+    tft.setCursor(SCREEN_WIDTH/2 - 40, 80);
+    tft.print(voltStr);
 
-    tft.setTextColor(C_YELLOW);
-    tft.setFreeFont(FMB);
-    tft.drawString(message, SCREEN_W/2, 120);
+    tft.setTextColor(COLOR_WARNING);
+    tft.setTextSize(2);
+    tft.setCursor(20, 120);
+    tft.print(message);
 
-    tft.fillRoundRect(20, 160, SCREEN_W - 40, 30, 4, C_WHITE);
-    tft.setTextColor(C_BLACK);
-    tft.drawString("CONTINUAR IGUALVEL", SCREEN_W/2, 175);
+    tft.fillRoundRect(20, 160, SCREEN_WIDTH - 40, 30, 4, COLOR_TEXT);
+    tft.setTextColor(COLOR_BACKGROUND);
+    tft.setCursor(40, 168);
+    tft.print("CONTINUAR IGUALVEL");
 
-    tft.fillRoundRect(20, 200, SCREEN_W - 40, 30, 4, C_SURFACE);
-    tft.setTextColor(C_TEXT);
-    tft.drawString("CANCELAR", SCREEN_W/2, 215);
+    tft.fillRoundRect(20, 200, SCREEN_WIDTH - 40, 30, 4, COLOR_SURFACE);
+    tft.setTextColor(COLOR_TEXT);
+    tft.setCursor(SCREEN_WIDTH/2 - 40, 208);
+    tft.print("CANCELAR");
     UNLOCK_TFT();
 }
 
 void safety_draw_lockout_screen(unsigned long remainingMs) {
     LOCK_TFT();
-    tft.fillScreen(C_BLACK);
+    tft.fillScreen(COLOR_BACKGROUND);
 
-    tft.setTextColor(SAFETY_COLOR_WARNING);
-    tft.setTextDatum(MC_DATUM);
-    tft.setFreeFont(FMB);
-    tft.drawString("BLOQUEADO", SCREEN_W/2, 60);
+    tft.setTextColor(COLOR_WARNING);
+    tft.setTextSize(3);
+    tft.setCursor(SCREEN_WIDTH/2 - 60, 60);
+    tft.print("BLOQUEADO");
 
-    tft.setTextColor(C_TEXT);
-    tft.setFreeFont(FMB);
-    tft.drawString("Equipamento bloqueado por", SCREEN_W/2, 90);
-    tft.drawString("seguranca", SCREEN_W/2, 110);
+    tft.setTextColor(COLOR_TEXT);
+    tft.setTextSize(2);
+    tft.setCursor(20, 100);
+    tft.print("Equipamento bloqueado");
 
     char timeStr[32];
     uint16_t seconds = remainingMs / 1000;
     snprintf(timeStr, sizeof(timeStr), "%d seg", seconds);
 
-    tft.setTextColor(SAFETY_COLOR_DANGER);
-    tft.setFreeFont(FMB);
-    tft.drawString(timeStr, SCREEN_W/2, 150);
+    tft.setTextColor(COLOR_BAD);
+    tft.setTextSize(3);
+    tft.setCursor(SCREEN_WIDTH/2 - 40, 150);
+    tft.print(timeStr);
 
-    tft.setTextColor(C_TEXT_SECONDARY);
-    tft.setFreeFont(FMBO);
-    tft.drawString("Aguarde...", SCREEN_W/2, 190);
+    tft.setTextColor(COLOR_TEXT_DIM);
+    tft.setTextSize(1);
+    tft.setCursor(SCREEN_WIDTH/2 - 30, 190);
+    tft.print("Aguarde...");
     UNLOCK_TFT();
 }
 
 void safety_draw_confirm_screen() {
     LOCK_TFT();
-    tft.fillScreen(C_BACKGROUND);
+    tft.fillScreen(COLOR_BACKGROUND);
 
-    tft.setTextColor(C_WARNING);
-    tft.setTextDatum(MC_DATUM);
-    tft.setFreeFont(FMB);
-    tft.drawString("AVISO IMPORTANTE", SCREEN_W/2, 40);
+    tft.setTextColor(COLOR_WARNING);
+    tft.setTextSize(2);
+    tft.setCursor(20, 40);
+    tft.print("AVISO IMPORTANTE");
 
-    tft.setTextColor(C_TEXT);
-    tft.setFreeFont(FMB);
-    tft.drawString("Para medir 220V AC, voce deve ter:", SCREEN_W/2, 80);
+    tft.setTextColor(COLOR_TEXT);
+    tft.setTextSize(1);
+    tft.setCursor(10, 80);
+    tft.print("Para medir 220V AC, voce deve ter:");
 
-    tft.setTextColor(C_TEXT_SECONDARY);
-    tft.setFreeFont(FMB);
-    tft.drawString("* Fusivel de protecao (1A)", SCREEN_W/2, 110);
-    tft.drawString("* Varistor (275V)", SCREEN_W/2, 130);
-    tft.drawString("* Circuitos de protecao", SCREEN_W/2, 150);
+    tft.setTextColor(COLOR_TEXT_DIM);
+    tft.setCursor(10, 110);
+    tft.print("* Fusivel de protecao (1A)");
+    tft.setCursor(10, 130);
+    tft.print("* Varistor (275V)");
+    tft.setCursor(10, 150);
+    tft.print("* Circuitos de protecao");
 
-    tft.fillRoundRect(10, 180, SCREEN_W/2 - 15, 30, 4, C_WHITE);
-    tft.setTextColor(C_BLACK);
-    tft.drawString("TENHO PROTECAO", SCREEN_W/2 - 40, 195);
+    tft.fillRoundRect(10, 180, SCREEN_WIDTH/2 - 15, 30, 4, COLOR_TEXT);
+    tft.setTextColor(COLOR_BACKGROUND);
+    tft.setCursor(15, 188);
+    tft.print("TENHO PROTECAO");
 
-    tft.fillRoundRect(SCREEN_W/2 + 5, 180, SCREEN_W/2 - 15, 30, 4, C_SURFACE);
-    tft.setTextColor(C_TEXT);
-    tft.drawString("CANCELAR", SCREEN_W/2 + 40, 195);
+    tft.fillRoundRect(SCREEN_WIDTH/2 + 5, 180, SCREEN_WIDTH/2 - 15, 30, 4, COLOR_SURFACE);
+    tft.setTextColor(COLOR_TEXT);
+    tft.setCursor(SCREEN_WIDTH/2 + 15, 188);
+    tft.print("CANCELAR");
     UNLOCK_TFT();
 }
 
 void safety_draw_check_screen() {
     LOCK_TFT();
-    tft.fillScreen(C_BLACK);
+    tft.fillScreen(COLOR_BACKGROUND);
 
-    tft.setTextColor(SAFETY_COLOR_SAFE);
-    tft.setTextDatum(MC_DATUM);
-    tft.setFreeFont(FMB);
-    tft.drawString("VERIFICANDO", SCREEN_W/2, 60);
+    tft.setTextColor(COLOR_GOOD);
+    tft.setTextSize(2);
+    tft.setCursor(SCREEN_WIDTH/2 - 60, 60);
+    tft.print("VERIFICANDO");
 
-    tft.setTextColor(C_TEXT);
-    tft.setFreeFont(FMB);
-    tft.drawString("Verificando tensoes...", SCREEN_W/2, 100);
+    tft.setTextColor(COLOR_TEXT);
+    tft.setTextSize(1);
+    tft.setCursor(SCREEN_WIDTH/2 - 60, 100);
+    tft.print("Verificando tensoes...");
 
-    tft.drawString("Nao conecte componentes", SCREEN_W/2, 130);
-    tft.drawString("energizados!", SCREEN_W/2, 150);
+    tft.setCursor(20, 130);
+    tft.print("Nao conecte componentes");
+    tft.setCursor(20, 150);
+    tft.print("energizados!");
     UNLOCK_TFT();
 }
 
@@ -305,7 +329,7 @@ void safety_activate_lockout() {
             safety_alert_sound_danger();
         }
 
-        DBG("Bloqueio de seguranca ativado");
+        LOG_SERIAL_F("Bloqueio de seguranca ativado");
     }
 }
 
@@ -320,7 +344,7 @@ void safety_deactivate_lockout() {
         buzzer_beep(SAFETY_BEEP_OK, 200);
     }
 
-    DBG("Bloqueio de seguranca desativado");
+    LOG_SERIAL_F("Bloqueio de seguranca desativado");
 }
 
 bool safety_is_locked_out() {
@@ -362,26 +386,31 @@ void safety_acknowledge_warning() {
 
 void safety_draw_splash() {
     LOCK_TFT();
-    tft.fillScreen(C_BLACK);
+    tft.fillScreen(COLOR_BACKGROUND);
 
-    tft.setTextColor(SAFETY_COLOR_WARNING);
-    tft.setTextDatum(MC_DATUM);
-    tft.setFreeFont(FMB);
-    tft.drawString("AVISO DE SEGURANCA", SCREEN_W/2, 50);
+    tft.setTextColor(COLOR_WARNING);
+    tft.setTextSize(2);
+    tft.setCursor(20, 50);
+    tft.print("AVISO DE SEGURANCA");
 
-    tft.setTextColor(C_TEXT);
-    tft.setFreeFont(FMB);
-    tft.drawString("Este equipamento pode", SCREEN_W/2, 90);
-    tft.drawString("medir tensoes ate 250V AC", SCREEN_W/2, 115);
+    tft.setTextColor(COLOR_TEXT);
+    tft.setTextSize(1);
+    tft.setCursor(10, 90);
+    tft.print("Este equipamento pode");
+    tft.setCursor(10, 115);
+    tft.print("medir tensoes ate 250V AC");
 
-    tft.setTextColor(C_ERROR);
-    tft.setFreeFont(FMB);
-    tft.drawString("CUIDADO: 220V E PERIGOSO!", SCREEN_W/2, 150);
+    tft.setTextColor(COLOR_BAD);
+    tft.setTextSize(2);
+    tft.setCursor(10, 150);
+    tft.print("CUIDADO: 220V E PERIGOSO!");
 
-    tft.setTextColor(C_TEXT_SECONDARY);
-    tft.setFreeFont(FMBO);
-    tft.drawString("Use sempre protecao adequada", SCREEN_W/2, 185);
-    tft.drawString("e Circuitos de protecao", SCREEN_W/2, 205);
+    tft.setTextColor(COLOR_TEXT_DIM);
+    tft.setTextSize(1);
+    tft.setCursor(10, 185);
+    tft.print("Use sempre protecao adequada");
+    tft.setCursor(10, 205);
+    tft.print("e Circuitos de protecao");
     UNLOCK_TFT();
 }
 
@@ -433,10 +462,20 @@ bool safety_confirm_electrical_measurement() {
     uint32_t startTime = millis();
 
     while(millis() - startTime < TIME_CONFIRM_TIMEOUT) {
-        uint16_t x, y;
-        if(tft.getTouch(&x, &y)) {
-            if(y > 180 && y < 210) {
-                if(x > 10 && x < SCREEN_W/2 - 15) {
+        if(touch.touched()) {
+            TS_Point raw = touch.getPoint();
+            uint16_t tx = 0;
+            uint16_t ty = 0;
+
+            if (!map_touch_to_screen_safe(raw, tx, ty)) {
+                delay(50);
+                vTaskDelay(pdMS_TO_TICKS(1));
+                continue;
+            }
+
+            // Mapeamento para botões já em coordenada de tela
+            if(ty > 180 && ty < 210) {
+                if(tx > 10 && tx < SCREEN_WIDTH/2 - 15) {
                     safetyStatus.hasFuseInstalled = true;
                     safetyStatus.hasVaristorInstalled = true;
                     safetyStatus.safetyAcknowledged = true;
@@ -446,7 +485,7 @@ bool safety_confirm_electrical_measurement() {
                     }
 
                     return true;
-                } else if(x > SCREEN_W/2 + 5) {
+                } else if(tx > SCREEN_WIDTH/2 + 5) {
                     if(safetySoundEnabled) {
                         buzzer_beep(BUZZER_FREQ_ERROR, 100);
                     }
@@ -496,7 +535,7 @@ SafetyCheckResult safety_detect_danger() {
     uint16_t adcValue = analogRead(PIN_ADC_ZMPT);
 
     float voltage = (adcValue - ZMPT_ZERO_POINT) * ZMPT_SCALE_FACTOR / 2048.0f;
-    voltage = abs(voltage);
+    voltage = fabsf(voltage);
     
     vTaskDelay(1); // Pequeno yield para o sistema
 
@@ -537,3 +576,6 @@ void safety_set_led_enabled(bool enabled) {
 void safety_set_lockout_enabled(bool enabled) {
     safetyAutoLockoutEnabled = enabled;
 }
+
+
+

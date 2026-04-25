@@ -6,6 +6,7 @@
 #define LOGGER_H
 
 #include <stdint.h>
+#include "types.h" // Para HistoryItem
 
 // ============================================================================
 // NÍVEIS DE LOG
@@ -22,30 +23,13 @@ enum LogLevel {
 // PROTÓTIPOS
 // ============================================================================
 
-// Inicialização (abre/cria arquivo de log)
 bool logger_init();
-
-// Escreve entrada de log
-bool logger_write(const char* component, float value,
-               const char* unit, const char* status);
-
-// Escreve timestamp + dados
-bool logger_write_ex(unsigned long timestamp, const char* component,
-                   float value, const char* unit, uint8_t status);
-
-// Log com nível
+bool logger_write(const char* component, float value, const char* unit, const char* status);
 void logger_log(LogLevel level, const char* message);
-
-// Rotina de log (chamada periodicamente no loop)
 void logger_update();
-
-// Fecha arquivo
 void logger_close();
 
-// ============================================================================
-// FORMATO DO CSV
-// ============================================================================
-// Timestamp;Component;Value;Unit;Status;Temperature;TotalMeasurements
-// 1745000000;Resistor;1000.5;Ω;BOM;25.0;15
+// Função para recuperar histórico para a UI
+uint8_t logger_get_recent(HistoryItem* buffer, uint8_t maxEntries);
 
 #endif // LOGGER_H

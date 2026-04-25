@@ -15,6 +15,7 @@
 #include "thermal.h"
 #include "logger.h"
 #include "display_globals.h"
+#include <Adafruit_GFX.h>
 #include "display_mutex.h"
 #include <esp_task_wdt.h>
 
@@ -318,25 +319,27 @@ void task_measurement(void* param) {
                 case MSG_TYPE_START:
                     currentMode = msg.param;
                     measuring = true;
-                    measurement_start(currentMode);
+                    // measurements_init() ? 
                     break;
 
                 case MSG_TYPE_STOP:
                     measuring = false;
-                    measurement_stop();
+                    // measurements_stop()?
                     break;
             }
         }
 
         // Se esta medindo, executa loop de medicao
         if (measuring) {
-            ComponentResult res = measurement_update();
+            measurements_update();
+            float val = measurements_get_last_value();
+            ComponentStatus status = measurements_get_last_status();
 
             // Envia resultado para display
             task_msg_update_display(
-                res.value,
-                res.unit,
-                db_status_color((ComponentStatus)res.status)
+                val,
+                "?", // TODO: Get unit
+                db_status_color(status)
             );
         }
 
@@ -386,7 +389,7 @@ void task_display(void* param) {
             tft.fillRect(20, 100, SCREEN_W - 40, 60, C_BLACK);
             tft.setTextColor(lastColor);
             tft.setTextDatum(MC_DATUM);
-            tft.setFreeFont(FONT_VALUE);
+            tft.setTextFont(1);
             char buf[32];
             snprintf(buf, sizeof(buf), "%.2f %s", lastValue, lastUnit);
             tft.drawString(buf, SCREEN_W / 2, 130);

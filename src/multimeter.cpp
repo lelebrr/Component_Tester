@@ -14,6 +14,7 @@
 #include "graphics.h"
 #include "buzzer.h"
 #include "display_globals.h"
+#include "display_mutex.h"
 #include <Wire.h>
 
 // ============================================================================
@@ -32,7 +33,7 @@ static unsigned long measureStartMs = 0;
 
 static float zmptCalibration = ZMPT_CALIBRATION;
 static float ina219Calibration = INA_CALIBRATION;
-static float shuntResistance = INA219_SHUNT;
+static float shuntResistance = INA_SHUNT_OHMS;
 
 static float filterBuffer[ZMPT_FILTER_SIZE];
 static uint8_t filterIndex = 0;
@@ -43,6 +44,18 @@ static bool shortCircuitAlert = true;
 static bool soundEnabled = true;
 
 static TaskHandle_t acMeasureTaskHandle = nullptr;
+
+// Helper para indicadores de status
+#define MSTATUS_GOOD 0
+#define MSTATUS_WARNING 1
+#define MSTATUS_BAD 2
+
+static void draw_status_indicator(uint8_t type, uint16_t x, uint16_t y, uint16_t size) {
+    uint16_t color = (type == MSTATUS_GOOD) ? COLOR_GOOD : (type == MSTATUS_WARNING ? COLOR_WARNING : COLOR_BAD);
+    LOCK_TFT();
+    tft.fillCircle(x, y, size/2, color);
+    UNLOCK_TFT();
+}
 
 // ============================================================================
 // INICIALIZACAO
@@ -58,7 +71,7 @@ void multimeter_init(bool calibrate) {
     // Tenta inicializar INA219 (opcional)
     bool ina219Ok = multimeter_ina219_init();
     if (!ina219Ok) {
-        DBG("[MULTI] INA219 não detectado, usando modo ADC apenas");
+        LOG_SERIAL_F("[MULTI] INA219 não detectado, usando modo ADC apenas");
     }
 
     // Carrega ou calibra
@@ -78,7 +91,6 @@ void multimeter_adc_init() {
     pinMode(PIN_ADC_PROBE2, INPUT);
 
     analogReadResolution(12);
-    // adc1_config_width and adc1_config_channel_atten are legacy ESP-IDF
 }
 
 bool multimeter_ina219_init() {
@@ -110,7 +122,7 @@ void multimeter_shutdown() {
 float multimeter_read_dc_voltage() {
     uint16_t adcValue = analogRead(PIN_ADC_PROBE1);
 
-    float voltage = (adcValue * ADC_REF_VOLTAGE / ADC_MAX_VALUE);
+    float voltage = (adcValue * ADC_REF_VOLT / ADC_MAX_VAL);
 
     if(currentRange == RANGE_LOW) {
         voltage *= MULTI_DC_RANGE_20V / 3.3f;
@@ -128,17 +140,18 @@ float multimeter_read_dc_current() {
         return 0.0f;
     }
 
-    Wire.requestFrom(INA_I2C_ADDR, (uint8_t)4);
-    uint16_t busVoltage = Wire.read() << 8;
-    busVoltage |= Wire.read();
+    if (Wire.requestFrom(INA_I2C_ADDR, (uint8_t)4) == 4) {
+        uint16_t busVoltage = (uint16_t)Wire.read() << 8;
+        busVoltage |= (uint16_t)Wire.read();
+    }
 
-    Wire.requestFrom(INA_I2C_ADDR, (uint8_t)2);
-    uint16_t shuntVoltage = Wire.read() << 8;
-    shuntVoltage |= Wire.read();
-
-    float current = (shuntVoltage / 1000.0f) / shuntResistance;
-
-    return multimeter_apply_filters(current);
+    if (Wire.requestFrom(INA_I2C_ADDR, (uint8_t)2) == 2) {
+        uint16_t shuntVoltage = (uint16_t)Wire.read() << 8;
+        shuntVoltage |= (uint16_t)Wire.read();
+        float current = ((float)(int16_t)shuntVoltage / 1000.0f) / shuntResistance;
+        return multimeter_apply_filters(current);
+    }
+    return 0.0f;
 }
 
 float multimeter_read_resistance() {
@@ -151,11 +164,12 @@ float multimeter_read_resistance() {
 
     pinMode(PIN_ADC_PROBE2, INPUT);
 
-    float voltage = adcValue * ADC_REF_VOLTAGE / ADC_MAX_VALUE;
+    float voltage = adcValue * ADC_REF_VOLT / ADC_MAX_VAL;
+    if (voltage >= 3.29f) return RESISTANCE_MAX;
     float resistor = 10000.0f * voltage / (3.3f - voltage);
 
-    if(voltage < 0.1f) {
-        return RESISTANCE_MAX;
+    if(voltage < 0.01f) {
+        return 0.0f;
     }
 
     return multimeter_apply_filters(resistor);
@@ -175,8 +189,6 @@ float multimeter_read_ac_voltage_rms() {
 
         delayMicroseconds(ZMPT_SAMPLE_RATE_US);
     }
-
-    uint32_t elapsed = micros() - startTime;
 
     float rms = multimeter_calculate_rms(samples, sampleCount);
 
@@ -255,15 +267,15 @@ MultimeterReading multimeter_read() {
         reading.value = 0;
     }
 
-    if(currentMode == MMODE_AC_VOLTAGE && reading.value > SAFETY_WARNING_VOLTAGE) {
+    if(currentMode == MMODE_AC_VOLTAGE && reading.value > HIGH_VOLTAGE_THRESHOLD) {
         reading.state = MSTATE_HIGH_VOLTAGE;
-        reading.statusColor = C_ERROR;
+        reading.statusColor = COLOR_BAD;
     } else if(currentMode == MMODE_RESISTANCE && reading.value < SHORT_CIRCUIT_OHMS) {
         reading.state = MSTATE_SHORT;
-        reading.statusColor = C_WARNING;
+        reading.statusColor = COLOR_WARNING;
     } else {
         reading.state = MSTATE_MEASURING;
-        reading.statusColor = C_SUCCESS;
+        reading.statusColor = COLOR_GOOD;
     }
 
     reading.valid = true;
@@ -382,7 +394,7 @@ void multimeter_load_calibration() {
 void multimeter_reset_calibration() {
     zmptCalibration = ZMPT_CALIBRATION;
     ina219Calibration = INA_CALIBRATION;
-    shuntResistance = INA219_SHUNT;
+    shuntResistance = INA_SHUNT_OHMS;
 }
 
 // ============================================================================
@@ -431,26 +443,32 @@ void multimeter_handle() {
 }
 
 void multimeter_update_display() {
+    LOCK_TFT();
     // Desenha caixa de valor
-    tft.fillRoundRect(20, 60, SCREEN_W - 40, 60, 6, C_DARK_GREY);
-    tft.drawRoundRect(20, 60, SCREEN_W - 40, 60, 6, C_PRIMARY);
-    tft.setTextColor(C_TEXT_SECONDARY);
-    tft.setFreeFont(FONT_SMALL);
-    tft.setTextDatum(TL_DATUM);
-    tft.drawString("Value", 30, 65);
-    tft.setTextColor(C_WHITE);
-    tft.setFreeFont(FONT_VALUE);
-    tft.setTextDatum(MC_DATUM);
+    tft.fillRoundRect(20, 60, SCREEN_WIDTH - 40, 60, 6, COLOR_SURFACE);
+    tft.drawRoundRect(20, 60, SCREEN_WIDTH - 40, 60, 6, COLOR_PRIMARY);
+    
+    tft.setTextColor(COLOR_TEXT_DIM);
+    tft.setTextSize(1);
+    tft.setCursor(30, 65);
+    tft.print("Value");
+    
+    tft.setTextColor(COLOR_TEXT);
+    tft.setTextSize(3);
     char valBuf[16];
     dtostrf(lastReading.value, 6, 2, valBuf);
-    tft.drawString(valBuf, SCREEN_W/2 - 20, 95);
-    tft.setFreeFont(FONT_NORMAL);
-    tft.drawString(lastReading.unit, SCREEN_W - 60, 95);
+    tft.setCursor(SCREEN_WIDTH/2 - 40, 85);
+    tft.print(valBuf);
+    
+    tft.setTextSize(2);
+    tft.setCursor(SCREEN_WIDTH - 60, 85);
+    tft.print(lastReading.unit);
+    UNLOCK_TFT();
 
     draw_status_indicator(
-        lastReading.state == MSTATE_MEASURING ? STATUS_GOOD :
-        lastReading.state == MSTATE_HIGH_VOLTAGE ? STATUS_BAD : STATUS_WARNING,
-        SCREEN_W - 40, 70, 24
+        lastReading.state == MSTATE_MEASURING ? MSTATUS_GOOD :
+        lastReading.state == MSTATE_HIGH_VOLTAGE ? MSTATUS_BAD : MSTATUS_WARNING,
+        SCREEN_WIDTH - 40, 70, 24
     );
 }
 
@@ -461,10 +479,12 @@ void multimeter_draw(const MultimeterReading* reading) {
     char fullStr[48];
     snprintf(fullStr, sizeof(fullStr), "%s %s", valueStr, reading->unit);
 
-    tft.setTextColor(C_PRIMARY);
-    tft.setTextDatum(MC_DATUM);
-    tft.setFreeFont(FONT_VALUE);
-    tft.drawString(fullStr, SCREEN_W/2, SCREEN_H/2);
+    LOCK_TFT();
+    tft.setTextColor(COLOR_PRIMARY);
+    tft.setTextSize(3);
+    tft.setCursor(SCREEN_WIDTH/2 - 50, SCREEN_HEIGHT/2);
+    tft.print(fullStr);
+    UNLOCK_TFT();
 }
 
 void multimeter_draw_value(float value, const char* unit, uint16_t color) {
@@ -474,11 +494,13 @@ void multimeter_draw_value(float value, const char* unit, uint16_t color) {
     char fullStr[48];
     snprintf(fullStr, sizeof(fullStr), "%s %s", valueStr, unit);
 
-    tft.fillRect(0, CONTENT_Y, SCREEN_W, CONTENT_H - 40, C_BLACK);
+    LOCK_TFT();
+    tft.fillRect(0, CONTENT_Y, SCREEN_WIDTH, CONTENT_H - 40, COLOR_BACKGROUND);
     tft.setTextColor(color);
-    tft.setTextDatum(MC_DATUM);
-    tft.setFreeFont(FONT_HEADER);
-    tft.drawString(fullStr, SCREEN_W/2, CONTENT_Y + CONTENT_H/2 - 20);
+    tft.setTextSize(4);
+    tft.setCursor(SCREEN_WIDTH/2 - 60, CONTENT_Y + CONTENT_H/2 - 20);
+    tft.print(fullStr);
+    UNLOCK_TFT();
 }
 
 void multimeter_draw_indicators(MultimeterMode mode, MeasurementRange range) {
@@ -501,37 +523,46 @@ void multimeter_draw_indicators(MultimeterMode mode, MeasurementRange range) {
         default: rangeStr = "---";
     }
 
-    tft.setTextColor(C_TEXT_SECONDARY);
-    tft.setTextDatum(TL_DATUM);
-    tft.setFreeFont(FONT_SMALL);
-    tft.drawString(modeStr, 10, SCREEN_H - FOOTER_H - 10);
+    LOCK_TFT();
+    tft.setTextColor(COLOR_TEXT_DIM);
+    tft.setTextSize(1);
+    tft.setCursor(10, SCREEN_HEIGHT - FOOTER_H - 10);
+    tft.print(modeStr);
 
-    tft.setTextDatum(TR_DATUM);
-    tft.drawString(rangeStr, SCREEN_W - 10, SCREEN_H - FOOTER_H - 10);
+    tft.setCursor(SCREEN_WIDTH - 40, SCREEN_HEIGHT - FOOTER_H - 10);
+    tft.print(rangeStr);
+    UNLOCK_TFT();
 }
 
 void multimeter_draw_alert(const char* message, uint16_t color) {
-    tft.fillRect(SCREEN_W/4, SCREEN_H/4, SCREEN_W/2, SCREEN_H/2, C_BLACK);
+    LOCK_TFT();
+    tft.fillRect(SCREEN_WIDTH/4, SCREEN_HEIGHT/4, SCREEN_WIDTH/2, SCREEN_HEIGHT/2, COLOR_BACKGROUND);
 
     tft.setTextColor(color);
-    tft.setTextDatum(MC_DATUM);
-    tft.setFreeFont(FONT_NORMAL);
-    tft.drawString("ALERTA", SCREEN_W/2, SCREEN_H/4 + 20);
+    tft.setTextSize(2);
+    tft.setCursor(SCREEN_WIDTH/2 - 30, SCREEN_HEIGHT/4 + 20);
+    tft.print("ALERTA");
 
-    tft.setTextColor(C_TEXT);
-    tft.drawString(message, SCREEN_W/2, SCREEN_H/2);
+    tft.setTextColor(COLOR_TEXT);
+    tft.setCursor(SCREEN_WIDTH/2 - 40, SCREEN_HEIGHT/2);
+    tft.print(message);
+    UNLOCK_TFT();
 }
 void multimeter_draw_history(const MeasurementHistory* hist) {
     uint16_t yStart = CONTENT_Y + 20;
     uint16_t barHeight = CONTENT_H - 40;
     uint16_t xStart = 20;
-    uint16_t barWidth = SCREEN_W - 40;
+    uint16_t barWidth = SCREEN_WIDTH - 40;
 
-    tft.fillRect(xStart, yStart, barWidth, barHeight, C_BLACK);
+    LOCK_TFT();
+    tft.fillRect(xStart, yStart, barWidth, barHeight, COLOR_BACKGROUND);
 
     uint8_t displayCount = min(hist->count, (uint8_t)10);
 
-    if(displayCount == 0) return;
+    if(displayCount == 0) {
+        UNLOCK_TFT();
+        return;
+    }
 
     float maxVal = 0;
     for(uint8_t i = 0; i < displayCount; i++) {
@@ -549,8 +580,9 @@ void multimeter_draw_history(const MeasurementHistory* hist) {
         uint16_t x = xStart + i * stepX;
         uint16_t y = yStart + barHeight - barH;
 
-        tft.fillRect(x + 1, y, stepX - 2, barH, C_PRIMARY);
+        tft.fillRect(x + 1, y, stepX - 2, barH, COLOR_PRIMARY);
     }
+    UNLOCK_TFT();
 }
 
 // ============================================================================
@@ -672,3 +704,7 @@ bool multimeter_detect_voltage_type(float voltage) {
     }
     return false;
 }
+
+
+// End of file
+

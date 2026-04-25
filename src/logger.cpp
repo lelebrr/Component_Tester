@@ -1,210 +1,88 @@
 // ============================================================================
-// Sondvolt v3.0 — Logger (Implementacao)
-// Descricao: Logging de medicoes no MicroSD
+// Sondvolt v3.0 — Logger (Implementação)
+// Hardware: ESP32-2432S028R (Cheap Yellow Display)
 // ============================================================================
 
 #include "logger.h"
 #include "config.h"
-#include "globals.h"
-#include "sdcard.h"
+#include "display_globals.h"
+#include <SdFat.h>
 
-#include <Arduino.h>
-#include <string.h>
-
-// ============================================================================
-// VARIAVEIS
-// ============================================================================
-
-static File logFile;
+extern SdFat sd;
+static FsFile logFile;
 static bool logInitialized = false;
-static unsigned long logIntervalMs = 10000; // 10s entre logs
-static unsigned long lastLogMs = 0;
-
-// ============================================================================
-// INICIALIZACAO
-// ============================================================================
 
 bool logger_init() {
-    if (logInitialized) {
-        return true;
-    }
-
-    if (!sdCardPresent) {
-        DBG("[LOG] SD nao disponivel");
+    // Desativa CS do TFT antes de acessar o SD (mesmo barramento SPI)
+    digitalWrite(PIN_TFT_CS, HIGH);
+    
+    // Usa SdSpiConfig para especificar o barramento SPI compartilhado
+    SdSpiConfig spiConfig(PIN_SD_CS, SHARED_SPI, SD_SCK_MHZ(20), &spiTFT_SD);
+    if (!sd.begin(spiConfig)) {
+        LOG_SERIAL_F("[LOG] SD nao disponivel");
         return false;
     }
-
-    // Abre arquivo de log (append)
-    logFile = SD.open(LOG_FILE, FILE_APPEND);
-
-    if (!logFile) {
-        // Cria arquivo se nao existe
-        logFile = SD.open(LOG_FILE, FILE_WRITE);
-        if (logFile) {
-            // Escreve cabecalho
-            logFile.println(HISTORY_HEADER);
-            logFile.close();
-            logFile = SD.open(LOG_FILE, FILE_APPEND);
-        }
-    }
-
-    if (!logFile) {
-        DBG("[LOG] Falha ao abrir arquivo");
-        return false;
-    }
-
     logInitialized = true;
-    DBG("[LOG] Logger inicializado");
+    LOG_SERIAL_F("[LOG] SD inicializado com sucesso");
     return true;
 }
 
-// ============================================================================
-// ESCRITA DE LOG
-// ============================================================================
+bool logger_write(const char* component, float value, const char* unit, const char* status) {
+    if (!logInitialized) return false;
 
-bool logger_write(const char* component, float value,
-                  const char* unit, const char* status) {
-    if (!logInitialized || !sdCardPresent) {
-        return false;
-    }
+    logFile = sd.open(LOG_FILE_PATH, FILE_WRITE | O_APPEND);
+    if (!logFile) return false;
 
-    if (!logFile) {
-        logFile = SD.open(LOG_FILE, FILE_APPEND);
-        if (!logFile) {
-            return false;
-        }
-    }
-
-    // Formata linha CSV
-    char line[128];
-    unsigned long ts = millis();
-
-    snprintf(line, sizeof(line),
-             "%lu%c%s%c%.6g%c%s%c%s",
-             ts, HISTORY_DELIMITER,
-             component, HISTORY_DELIMITER,
-             value, HISTORY_DELIMITER,
-             unit, HISTORY_DELIMITER,
-             status);
-
-    size_t written = logFile.println(line);
-    logFile.flush();
-
-    return written > 0;
+    char buf[128];
+    snprintf(buf, sizeof(buf), "%lu;%s;%.4f;%s;%s", millis(), component, value, unit, status);
+    logFile.println(buf);
+    logFile.close();
+    return true;
 }
 
-bool logger_write_ex(unsigned long timestamp, const char* component,
-                     float value, const char* unit, uint8_t status) {
-    if (!logInitialized || !sdCardPresent) {
-        return false;
-    }
+uint8_t logger_get_recent(HistoryItem* buffer, uint8_t maxEntries) {
+    if (!logInitialized) return 0;
 
-    if (!logFile) {
-        logFile = SD.open(LOG_FILE, FILE_APPEND);
-        if (!logFile) {
-            return false;
+    logFile = sd.open(LOG_FILE_PATH, FILE_READ);
+    if (!logFile) return 0;
+
+    // Simples: Lê o arquivo todo e guarda os últimos N
+    // Para melhor performance em arquivos grandes, deveríamos ler de trás pra frente
+    uint8_t count = 0;
+    String line;
+    while (logFile.available()) {
+        line = logFile.readStringUntil('\n');
+        if (line.length() < 10) continue;
+
+        // Parse simples do CSV
+        // Formato: timestamp;component;value;unit;status
+        int first = line.indexOf(';');
+        int second = line.indexOf(';', first + 1);
+        int third = line.indexOf(';', second + 1);
+        int fourth = line.indexOf(';', third + 1);
+
+        if (fourth == -1) continue;
+
+        // Rotaciona buffer se exceder maxEntries
+        uint8_t targetIdx = (count < maxEntries) ? count : (maxEntries - 1);
+        if(count >= maxEntries) {
+            for(int i=0; i<maxEntries-1; i++) buffer[i] = buffer[i+1];
         }
+
+        strncpy(buffer[targetIdx].componentName, line.substring(first + 1, second).c_str(), 31);
+        buffer[targetIdx].value = line.substring(second + 1, third).toFloat();
+        strncpy(buffer[targetIdx].unit, line.substring(third + 1, fourth).c_str(), 9);
+        buffer[targetIdx].status = 0; // Simplificado
+
+        count++;
     }
-
-    const char* statusStr;
-    switch (status) {
-        case STATUS_GOOD: statusStr = "GOOD"; break;
-        case STATUS_BAD: statusStr = "BAD"; break;
-        case STATUS_SUSPECT: statusStr = "SUSPECT"; break;
-        default: statusStr = "UNKNOWN"; break;
-    }
-
-    char line[128];
-    snprintf(line, sizeof(line),
-             "%lu%c%s%c%.6g%c%s%c%s",
-             timestamp, HISTORY_DELIMITER,
-             component, HISTORY_DELIMITER,
-             value, HISTORY_DELIMITER,
-             unit, HISTORY_DELIMITER,
-             statusStr);
-
-    size_t written = logFile.println(line);
-    logFile.flush();
-
-    return written > 0;
+    logFile.close();
+    return (count > maxEntries) ? maxEntries : count;
 }
-
-// ============================================================================
-// LOG COM NIVEL
-// ============================================================================
 
 void logger_log(LogLevel level, const char* message) {
-    const char* levelStr;
-    switch (level) {
-        case LOG_DEBUG: levelStr = "[D]"; break;
-        case LOG_INFO: levelStr = "[I]"; break;
-        case LOG_WARNING: levelStr = "[W]"; break;
-        case LOG_ERROR: levelStr = "[E]"; break;
-        case LOG_CRITICAL: levelStr = "[C]"; break;
-        default: levelStr = "[?]"; break;
-    }
-
-    char line[256];
-    snprintf(line, sizeof(line), "%lu %s %s", millis(), levelStr, message);
-
-    // Sempre imprime no Serial
-    Serial.println(line);
-
-    // Se SD disponivel, salva no arquivo
-    if (sdCardPresent) {
-        if (!logFile) {
-            logFile = SD.open(LOG_FILE, FILE_APPEND);
-        }
-        if (logFile) {
-            logFile.println(line);
-            logFile.flush();
-        }
-    }
+    Serial.printf("[%d] %s\n", level, message);
 }
 
-// ============================================================================
-// ROTINA DE LOG (chamada no loop)
-// ============================================================================
-
-void logger_update() {
-    if (!logInitialized) {
-        return;
-    }
-
-    unsigned long now = millis();
-
-    // Verifica intervalo
-    if ((now - lastLogMs) >= logIntervalMs) {
-        // Log estatisticas periodicas
-        if (totalMeasurements > 0) {
-            char msg[64];
-            snprintf(msg, sizeof(msg),
-                     "Total:%u Good:%u Bad:%u",
-                     totalMeasurements, goodMeasurements, badMeasurements);
-            logger_log(LOG_INFO, msg);
-        }
-
-        lastLogMs = now;
-    }
-
-    // Fecha arquivo periodicamente para salvar
-    if (logFile) {
-        if (logFile.size() > 1024) {
-            logFile.flush();
-        }
-    }
-}
-
-// ============================================================================
-// FECHAR ARQUIVO
-// ============================================================================
-
-void logger_close() {
-    if (logFile) {
-        logFile.flush();
-        logFile.close();
-        logFile = File();
-    }
-    logInitialized = false;
-    DBG("[LOG] Logger fechado");
-}
+void logger_update() {}
+void logger_close() {}

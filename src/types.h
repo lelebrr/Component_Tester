@@ -32,6 +32,7 @@ enum ComponentType {
     COMP_RELAY      = 19,
     COMP_IC         = 20,
     COMP_COIL       = 21,
+    COMP_GENERIC    = 22,
     COMP_UNKNOWN    = 99,
     COMP_NONE       = 100
 };
@@ -78,6 +79,17 @@ enum IconType {
     ICON_WARNING,
     ICON_VOLTAGE,
     ICON_UNKNOWN
+};
+
+// ============================================================================
+// ESTRUTURAS DE DADOS DE UI
+// ============================================================================
+struct HistoryItem {
+    char componentName[32];
+    float value;
+    char unit[10];
+    uint8_t status;
+    unsigned long timestamp;
 };
 
 #endif
